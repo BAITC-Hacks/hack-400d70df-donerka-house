@@ -1,129 +1,78 @@
-# ⚡ EKT.KZ — AI Ассистент (ГК Электрокомплект)
+# ⚡ EKT.KZ — AI Ассистент
 
-AI-консультант для интернет-магазина электрооборудования **ekt.kz** на Go + OpenAI GPT-4o-mini.
+AI-консультант интернет-магазина электрооборудования **ekt.kz** на Go + OpenAI GPT-4o-mini.
 
-## 🚀 Быстрый старт
+## Быстрый старт
 
-```bash
+~~~bash
 git clone https://github.com/BAITC-Hacks/hack-400d70df-donerka-house
 cd hack-400d70df-donerka-house
 go mod tidy
 
-# С AI (нужен OpenAI API Key)
+# полноценный диалог через OpenAI
 OPENAI_API_KEY=sk-... go run main.go
 
-# Демо-режим (без ключа)
+# локальный demo-режим: условия, наличие загруженной детали и корзина работают без ключа
 go run main.go
-```
+~~~
 
-Открыть: **http://localhost:8080**
+Открыть: http://localhost:8080
 
----
+## Что реализовано
 
-## 📁 Структура проекта
+- Каталог из data/products.json и data/products2.json с дедупликацией.
+- Детальная карточка через GET /api/product/{id}: наличие по складам, характеристики, ссылка на detail API и сертификаты, если они загружены.
+- Аналоги по RECOMMEND, бренду, номинальному току, числу полюсов, отключающей способности и похожей серии.
+- Структурированные условия оплаты, доставки, минимального заказа и возврата из data/purchase_terms.json.
+- Анонимная серверная сессия с историей последних 20 сообщений.
+- Безопасный двухшаговый сценарий корзины: запрос → подтверждение «Да» → повторная проверка остатка → добавление.
+- Прямая ссылка на корзину /cart/{session_id} и JSON endpoint GET /api/cart/{session_id}.
 
-```
-├── main.go              # HTTP сервер, загрузка каталога
-├── handlers/
-│   ├── chat.go          # POST /api/chat — OpenAI с контекстом каталога
-│   └── menu.go          # GET  /api/catalog — список товаров
-├── models/
-│   └── types.go         # Go-структуры данных (Product, ProductDetail, etc.)
-├── data/
-│   ├── products.json    # Список товаров (страница 2) — формат API ekt.kz
-│   ├── products2.json   # Список товаров (страница 1)
-│   └── detail.json      # Детальная информация о товаре
-├── static/
-│   ├── index.html       # Сайт в стиле ekt.kz (синий/красный)
-│   ├── style.css        # Стили
-│   └── chat.js          # AI чат-виджет
-├── Dockerfile
-└── README.md
-```
+Важно: предоставленный data/detail.json содержит точный остаток только для одной позиции. Для остальных карточек ассистент не выдумывает наличие и сообщает, что detail API нужно загрузить или уточнить у менеджера.
 
----
-
-## 🌐 API
+## API
 
 | Метод | Endpoint | Описание |
-|-------|----------|----------|
-| `GET` | `/` | Главная страница |
-| `GET` | `/api/catalog` | Все товары из JSON файлов |
-| `POST` | `/api/chat` | Вопрос AI-ассистенту |
-| `GET` | `/health` | Статус сервера |
+|---|---|---|
+| GET | / | Главная страница |
+| GET | /api/catalog | Список товаров |
+| GET | /api/product/{id} | Товар, detail, сертификаты |
+| POST | /api/chat | Чат с message и session_id |
+| GET | /api/cart/{session_id} | Содержимое корзины |
+| GET | /cart/{session_id} | Страница корзины |
+| GET | /health | Статус сервера |
 
-### Пример чата:
-```bash
+Пример:
+
+~~~bash
 curl -X POST http://localhost:8080/api/chat \
   -H "Content-Type: application/json" \
-  -d '{"message": "Нужен автоматический выключатель 160А, что есть?"}'
-```
+  -d '{"message":"Хочу купить 5 шт. арт. 200300285_","session_id":"demo"}'
 
----
+curl -X POST http://localhost:8080/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Да","session_id":"demo"}'
 
-## 📦 Формат JSON файлов
+# затем откройте http://localhost:8080/cart/demo
+~~~
 
-Файлы совместимы с API ekt.kz (`/api/products/` и `/api/products/detail`):
+## Форматы данных
 
-**products.json / products2.json:**
-```json
-{
-  "page": 1, "per_page": 20, "count": 20,
-  "items": [
-    { "id": 515291, "name": "...", "article": "...", "price": 64920, "image": "...", "url": "...", "url_api_detail": "..." }
-  ]
-}
-```
+products.json и products2.json используют формат страниц API ekt.kz. detail.json содержит id, article, quantity, stores, properties. certificates.json и purchase_terms.json — локальные конфигурационные файлы. Демо-ссылки сертификатов помечаются is_demo: true и не выдаются за подтвержденные документы.
 
-**detail.json:**
-```json
-{
-  "id": 515291, "name": "...", "article": "...",
-  "description": "...", "price": 64920, "quantity": 23,
-  "stores": [{"id": 3, "name": "Шымкент", "quantity": 2}],
-  "properties": { ... }
-}
-```
+## Docker и деплой
 
----
-
-## ➕ Добавить больше товаров
-
-Просто положи дополнительные файлы JSON в папку `data/`:
-- `products3.json`, `products4.json` и т.д.
-- Обнови `main.go` → массив `files` чтобы подключить их
-
----
-
-## 🐳 Docker
-
-```bash
+~~~bash
 docker build -t ekt-ai .
 docker run -p 8080:8080 -e OPENAI_API_KEY=sk-... ekt-ai
-```
+~~~
 
----
+Для Railway/Render подключите этот GitHub-репозиторий и задайте OPENAI_API_KEY в переменных окружения. OPENAI_MODEL необязателен и по умолчанию равен gpt-4o-mini.
 
-## ☁️ Деплой на Railway
+## Стек
 
-1. [railway.app](https://railway.app) → "New Project" → "Deploy from GitHub"
-2. Выбери: `BAITC-Hacks/hack-400d70df-donerka-house`
-3. Variables: `OPENAI_API_KEY=sk-...`
-4. Готово — Railway соберёт через Dockerfile автоматически
-
----
-
-## 🔑 OpenAI API Key
-
-[platform.openai.com/api-keys](https://platform.openai.com/api-keys)
-Модель `gpt-4o-mini` — ~\$0.0002 за запрос
-
----
-
-## 🛠️ Стек
-
-- **Backend**: Go 1.21 (`net/http`)
-- **AI**: OpenAI GPT-4o-mini
-- **Data**: JSON файлы из API ekt.kz
-- **Frontend**: HTML/CSS/JS (без фреймворков, стиль ekt.kz)
-- **Deploy**: Docker + Railway/Render
+- Backend: Go 1.21, net/http
+- AI: OpenAI Chat Completions
+- Data: JSON-файлы каталога
+- Frontend: HTML/CSS/JavaScript
+- Deploy: Docker + Railway/Render
