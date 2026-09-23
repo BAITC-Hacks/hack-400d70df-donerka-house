@@ -75,17 +75,63 @@ func (c *Catalog) AddProducts(products []Product) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	seen := make(map[string]struct{}, len(c.Products)+len(products))
-	for _, product := range c.Products {
-		seen[strings.ToLower(product.Article)+"|"+strings.ToLower(product.URL)] = struct{}{}
-	}
-	for _, product := range products {
-		key := strings.ToLower(product.Article) + "|" + strings.ToLower(product.URL)
-		if product.Name != "" && product.URL != "" {
-			if _, exists := seen[key]; !exists {
-				c.Products = append(c.Products, product)
-				seen[key] = struct{}{}
+
+	for _, incoming := range products {
+		if incoming.Name == "" || incoming.URL == "" {
+			continue
+		}
+
+		found := -1
+		for i := range c.Products {
+			sameArticle := incoming.Article != "" && strings.EqualFold(c.Products[i].Article, incoming.Article)
+			sameURL := incoming.URL != "" && strings.EqualFold(c.Products[i].URL, incoming.URL)
+			if sameArticle || sameURL {
+				found = i
+				break
 			}
+		}
+
+		if found == -1 {
+			c.Products = append(c.Products, incoming)
+			continue
+		}
+
+		// Live catalog data should refresh price, stock, description,
+		// certificates and characteristics for an already known product.
+		current := &c.Products[found]
+		if incoming.Name != "" {
+			current.Name = incoming.Name
+		}
+		if incoming.Article != "" {
+			current.Article = incoming.Article
+		}
+		if incoming.Price > 0 {
+			current.Price = incoming.Price
+		}
+		if incoming.Image != "" {
+			current.Image = incoming.Image
+		}
+		if incoming.URL != "" {
+			current.URL = incoming.URL
+		}
+		if incoming.Description != "" {
+			current.Description = incoming.Description
+		}
+		if incoming.Properties != nil {
+			current.Properties = incoming.Properties
+		}
+		if incoming.Source != "" {
+			current.Source = incoming.Source
+		}
+		if incoming.Availability != "" {
+			current.Availability = incoming.Availability
+			current.StockQuantity = incoming.StockQuantity
+		}
+		if incoming.StockLocation != "" {
+			current.StockLocation = incoming.StockLocation
+		}
+		if len(incoming.Certificates) > 0 {
+			current.Certificates = append([]string(nil), incoming.Certificates...)
 		}
 	}
 }
