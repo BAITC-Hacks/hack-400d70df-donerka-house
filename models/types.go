@@ -131,6 +131,10 @@ func (c *Catalog) AddProducts(products []Product) {
 		if incoming.StockLocation != "" {
 			current.StockLocation = incoming.StockLocation
 		}
+		if incoming.TotalStockQuantity > 0 || len(incoming.Stores) > 0 {
+			current.TotalStockQuantity = incoming.TotalStockQuantity
+			current.Stores = append([]Store(nil), incoming.Stores...)
+		}
 		if len(incoming.Certificates) > 0 {
 			current.Certificates = append([]string(nil), incoming.Certificates...)
 		}
