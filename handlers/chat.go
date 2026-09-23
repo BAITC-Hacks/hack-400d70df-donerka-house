@@ -601,11 +601,10 @@ func appendAnalogFacts(reply string, target *models.Product, analogs []models.Pr
 }
 
 // restorePendingPurchase recovers a selection that was described by the
-// assistant but not stored in pending state. This can happen when the server
-// restarts between the selection message and "да, добавь", or when the model
-// summarizes a multi-item selection itself. Articles and names are still
-// matched against validated recent catalog products; no client-provided item
-// is trusted directly.
+// assistant but not stored in pending state. This can happen when the model
+// summarizes a multi-item selection itself while the conversation is still
+// available. Articles and names are still matched against validated recent
+// catalog products; no client-provided item is trusted directly.
 func restorePendingPurchase(history []openai.ChatCompletionMessage, products []models.Product) *pendingPurchase {
 	if len(products) == 0 || len(history) == 0 {
 		return nil
@@ -625,6 +624,9 @@ func restorePendingPurchase(history []openai.ChatCompletionMessage, products []m
 		selectionText = selectionText[:analogIndex]
 	}
 	lowerSelection = strings.ToLower(selectionText)
+	if !strings.Contains(lowerSelection, "подтверд") && !strings.Contains(lowerSelection, "confirm") {
+		return nil
+	}
 
 	lines := make([]pendingLine, 0, len(products))
 	for _, product := range products {
