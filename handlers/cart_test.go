@@ -273,3 +273,35 @@ func TestDemoChatSuggestsAnalogForUnavailableProduct(t *testing.T) {
 		t.Fatalf("expected analog explanation in reply, got %q", chat.Reply)
 	}
 }
+
+
+func TestEKTArticleWithoutTrailingUnderscoreResolvesToProduct(t *testing.T) {
+	catalog := &models.Catalog{Products: []models.Product{{
+		ID:            18238,
+		Name:          "D34620 EZ9 АВДТ 20А (30мА) SchnEl",
+		Article:       "010400273_",
+		Price:         14630,
+		Availability:  "В наличии",
+		StockQuantity: 4,
+	}}}
+
+	product := findProductByReference(catalog, "010400273")
+	if product == nil || product.Article != "010400273_" {
+		t.Fatalf("expected EKT article with suffix to resolve, got %+v", product)
+	}
+
+	t.Setenv("OPENAI_API_KEY", "")
+	store := NewCartStore()
+	handler := ChatHandler(catalog, store, nil, NewConversationStore())
+	first := doJSONRequest(handler, http.MethodPost, "/api/chat", []byte(`{"message":"Добавь 2 шт автомат 010400273"}`), nil)
+	if first.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", first.Code, first.Body.String())
+	}
+	var pending models.ChatResponse
+	if err := json.NewDecoder(first.Body).Decode(&pending); err != nil {
+		t.Fatal(err)
+	}
+	if pending.CartAction != nil || pending.Cart != nil {
+		t.Fatalf("cart must not change before confirmation: %+v", pending)
+	}
+}
