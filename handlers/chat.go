@@ -414,6 +414,10 @@ func confirmPending(store *SessionStore, catalog *models.Catalog, sessionID stri
 	if !hasDetail {
 		return "Не могу безопасно добавить товар: его точный остаток не загружен. Сначала уточним наличие у менеджера.", &pending, models.CartResponse{SessionID: sessionID}
 	}
+	if detail.Price > 0 && pending.Price <= 0 {
+		pending.Price = detail.Price
+		pending.Total = pending.Price * float64(pending.Quantity)
+	}
 	if detail.Quantity <= 0 {
 		session.Pending = nil
 		return analogReply(catalog, &models.Product{ID: pending.ProductID, Name: pending.Name, Article: pending.Article, Price: pending.Price}), nil, models.CartResponse{SessionID: sessionID}
