@@ -1,85 +1,58 @@
-// ====================== CHAT.JS ======================
-// Donerka House AI Chat Widget
+// ===================== CHAT.JS — EKT.KZ AI Assistant =====================
 
-const API_URL = '/api/chat';
-
+const API_CHAT = '/api/chat';
 let isOpen = false;
-let isWaiting = false;
-let suggestionsHidden = false;
+let isBusy = false;
+let chipsHidden = false;
 
-// Toggle chat open/close
 function toggleChat() {
   const widget = document.getElementById('chatWidget');
-  const badge  = document.getElementById('chatBubbleBadge');
   isOpen = !isOpen;
-
   if (isOpen) {
     widget.classList.add('open');
-    badge.style.display = 'none';
-    scrollToBottom();
-    document.getElementById('chatInput').focus();
+    scrollBottom();
+    setTimeout(() => document.getElementById('chatInput').focus(), 100);
   } else {
     widget.classList.remove('open');
   }
 }
 
-// Open chat programmatically (from hero button)
 function openChat() {
   if (!isOpen) toggleChat();
 }
 
-// Send message on Enter key
-function handleKeyPress(e) {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    sendMessage();
+function sendChip(btn) {
+  hideChips();
+  sendText(btn.textContent.trim());
+}
+
+function sendMsg() {
+  const inp = document.getElementById('chatInput');
+  const text = inp.value.trim();
+  if (!text || isBusy) return;
+  inp.value = '';
+  hideChips();
+  sendText(text);
+}
+
+function hideChips() {
+  if (!chipsHidden) {
+    document.getElementById('chatChips').style.display = 'none';
+    chipsHidden = true;
   }
 }
 
-// Send a suggestion chip
-function sendSuggestion(btn) {
-  const text = btn.textContent.trim();
-  // Hide suggestions after first use
-  if (!suggestionsHidden) {
-    document.getElementById('chatSuggestions').style.display = 'none';
-    suggestionsHidden = true;
-  }
-  sendMessageText(text);
-}
+async function sendText(text) {
+  if (isBusy) return;
+  isBusy = true;
+  document.getElementById('chatSendBtn').disabled = true;
 
-// Send current input value
-function sendMessage() {
-  const input = document.getElementById('chatInput');
-  const text = input.value.trim();
-  if (!text || isWaiting) return;
-  input.value = '';
-
-  if (!suggestionsHidden) {
-    document.getElementById('chatSuggestions').style.display = 'none';
-    suggestionsHidden = true;
-  }
-
-  sendMessageText(text);
-}
-
-// Core: append user message, show typing, call API, show reply
-async function sendMessageText(text) {
-  if (isWaiting) return;
-  isWaiting = true;
-
-  // Disable send button
-  const sendBtn = document.getElementById('chatSendBtn');
-  sendBtn.disabled = true;
-
-  // Append user message
-  appendMessage(text, 'user');
-
-  // Show typing indicator
+  appendMsg(text, 'user');
   const typingId = showTyping();
-  scrollToBottom();
+  scrollBottom();
 
   try {
-    const res = await fetch(API_URL, {
+    const res = await fetch(API_CHAT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: text }),
@@ -88,89 +61,71 @@ async function sendMessageText(text) {
     removeTyping(typingId);
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Ошибка сервера' }));
-      appendMessage('⚠️ ' + (err.error || 'Произошла ошибка. Попробуйте позже.'), 'bot');
+      const err = await res.json().catch(() => ({}));
+      appendMsg('⚠️ ' + (err.error || 'Ошибка. Попробуйте снова.'), 'bot');
     } else {
       const data = await res.json();
-      appendMessage(data.reply || '...', 'bot');
+      appendMsg(data.reply || '...', 'bot');
     }
-  } catch (e) {
+  } catch {
     removeTyping(typingId);
-    appendMessage('⚠️ Не удалось подключиться к серверу. Проверьте соединение.', 'bot');
+    appendMsg('⚠️ Нет соединения с сервером.', 'bot');
   } finally {
-    isWaiting = false;
-    sendBtn.disabled = false;
-    scrollToBottom();
+    isBusy = false;
+    document.getElementById('chatSendBtn').disabled = false;
+    scrollBottom();
     document.getElementById('chatInput').focus();
   }
 }
 
-// Append a message bubble to the chat
-function appendMessage(text, sender) {
+function appendMsg(text, role) {
   const container = document.getElementById('chatMessages');
-  const div = document.createElement('div');
-  div.className = `message ${sender === 'bot' ? 'bot-message' : 'user-message'}`;
+  const wrap = document.createElement('div');
+  wrap.className = `msg ${role}`;
 
   const bubble = document.createElement('div');
-  bubble.className = 'message-bubble';
-  // Support simple line breaks
+  bubble.className = 'msg-bubble';
   bubble.innerHTML = text.replace(/\n/g, '<br/>');
 
   const time = document.createElement('div');
-  time.className = 'message-time';
-  time.textContent = getTimeString();
+  time.className = 'msg-time';
+  time.textContent = now();
 
-  div.appendChild(bubble);
-  div.appendChild(time);
-  container.appendChild(div);
-  scrollToBottom();
+  wrap.appendChild(bubble);
+  wrap.appendChild(time);
+  container.appendChild(wrap);
+  scrollBottom();
 }
 
-// Show animated typing indicator, returns its id
 function showTyping() {
+  const id = 'typ-' + Date.now();
   const container = document.getElementById('chatMessages');
-  const id = 'typing-' + Date.now();
-  const div = document.createElement('div');
-  div.id = id;
-  div.className = 'message bot-message typing-indicator';
-  div.innerHTML = `<div class="message-bubble">
-    <span class="typing-dot"></span>
-    <span class="typing-dot"></span>
-    <span class="typing-dot"></span>
-  </div>`;
-  container.appendChild(div);
-  scrollToBottom();
+  const wrap = document.createElement('div');
+  wrap.id = id;
+  wrap.className = 'msg bot typing';
+  wrap.innerHTML = `<div class="msg-bubble"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>`;
+  container.appendChild(wrap);
+  scrollBottom();
   return id;
 }
 
-// Remove typing indicator by id
 function removeTyping(id) {
   const el = document.getElementById(id);
   if (el) el.remove();
 }
 
-// Scroll messages to bottom
-function scrollToBottom() {
-  const container = document.getElementById('chatMessages');
-  setTimeout(() => { container.scrollTop = container.scrollHeight; }, 50);
+function scrollBottom() {
+  const c = document.getElementById('chatMessages');
+  setTimeout(() => { c.scrollTop = c.scrollHeight; }, 50);
 }
 
-// Format current time as HH:MM
-function getTimeString() {
-  const now = new Date();
-  return now.getHours().toString().padStart(2, '0') + ':' +
-         now.getMinutes().toString().padStart(2, '0');
+function now() {
+  const d = new Date();
+  return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
 }
 
-// Show new message badge on bubble when chat is closed
-function notifyBadge() {
-  if (!isOpen) {
-    document.getElementById('chatBubbleBadge').style.display = 'flex';
-  }
-}
-
-// Close chat on outside click
-document.addEventListener('click', function(e) {
+// Close on outside click
+document.addEventListener('click', e => {
   const widget = document.getElementById('chatWidget');
   const bubble = document.getElementById('chatBubble');
   if (isOpen && !widget.contains(e.target) && !bubble.contains(e.target)) {

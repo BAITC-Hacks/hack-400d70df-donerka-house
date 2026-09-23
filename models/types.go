@@ -1,48 +1,62 @@
 package models
 
-// MenuItem represents a single item on the menu
-type MenuItem struct {
-	ID          int     `json:"id"`
-	Name        string  `json:"name"`
-	Description string  `json:"description"`
-	Price       float64 `json:"price"`
-	Weight      string  `json:"weight"`
-	Spicy       bool    `json:"spicy"`
+// Product represents a single product from the catalog
+type Product struct {
+	ID           int     `json:"id"`
+	Name         string  `json:"name"`
+	Article      string  `json:"article"`
+	Price        float64 `json:"price"`
+	Image        string  `json:"image"`
+	URL          string  `json:"url"`
+	URLAPIDetail string  `json:"url_api_detail"`
 }
 
-// MenuCategory represents a category of menu items
-type MenuCategory struct {
-	ID    string     `json:"id"`
-	Name  string     `json:"name"`
-	Items []MenuItem `json:"items"`
+// ProductsPage represents a paginated list of products
+type ProductsPage struct {
+	Page    int       `json:"page"`
+	PerPage int       `json:"per_page"`
+	Count   int       `json:"count"`
+	Items   []Product `json:"items"`
 }
 
-// RestaurantInfo holds general restaurant information
-type RestaurantInfo struct {
-	Name         string `json:"name"`
-	Description  string `json:"description"`
-	Address      string `json:"address"`
-	Phone        string `json:"phone"`
-	WorkingHours string `json:"working_hours"`
+// Store represents stock availability in a specific city/store
+type Store struct {
+	ID       int    `json:"id"`
+	Name     string `json:"name"`
+	Quantity int    `json:"quantity"`
 }
 
-// Menu is the full menu structure from JSON
-type Menu struct {
-	Restaurant RestaurantInfo `json:"restaurant"`
-	Categories []MenuCategory `json:"categories"`
+// ProductDetail represents detailed product information
+type ProductDetail struct {
+	ID          int                    `json:"id"`
+	Name        string                 `json:"name"`
+	Article     string                 `json:"article"`
+	Description string                 `json:"description"`
+	Price       float64                `json:"price"`
+	Quantity    int                    `json:"quantity"`
+	Stores      []Store                `json:"stores"`
+	Image       string                 `json:"image"`
+	URL         string                 `json:"url"`
+	Properties  map[string]interface{} `json:"properties"`
 }
 
-// ChatRequest is the incoming chat message from the user
+// Catalog holds all loaded product data for the AI context
+type Catalog struct {
+	Products []Product
+	Detail   *ProductDetail // example detail record
+}
+
+// ChatRequest is the incoming user message
 type ChatRequest struct {
 	Message string `json:"message"`
 }
 
-// ChatResponse is the AI reply sent back to the user
+// ChatResponse is the AI reply
 type ChatResponse struct {
 	Reply string `json:"reply"`
 }
 
-// ErrorResponse is a standard error response
+// ErrorResponse is a standard error
 type ErrorResponse struct {
 	Error string `json:"error"`
 }

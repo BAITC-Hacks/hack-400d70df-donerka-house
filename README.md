@@ -1,132 +1,129 @@
-# 🌯 Donerka House — AI Chatbot Website
+# ⚡ EKT.KZ — AI Ассистент (ГК Электрокомплект)
 
-Сайт ресторана быстрого питания "Donerka House" с встроенным AI-ассистентом на Go + OpenAI GPT.
+AI-консультант для интернет-магазина электрооборудования **ekt.kz** на Go + OpenAI GPT-4o-mini.
 
 ## 🚀 Быстрый старт
 
-### 1. Установи зависимости
-
 ```bash
+git clone https://github.com/BAITC-Hacks/hack-400d70df-donerka-house
+cd hack-400d70df-donerka-house
 go mod tidy
-```
 
-### 2. Настрой переменные окружения
-
-```bash
-cp .env.example .env
-# Открой .env и вставь свой OpenAI API Key
-```
-
-### 3. Запусти сервер
-
-```bash
 # С AI (нужен OpenAI API Key)
 OPENAI_API_KEY=sk-... go run main.go
 
-# Без AI (демо-режим, работает без ключа)
+# Демо-режим (без ключа)
 go run main.go
 ```
 
-Открой в браузере: **http://localhost:8080**
+Открыть: **http://localhost:8080**
 
 ---
 
 ## 📁 Структура проекта
 
 ```
-├── main.go              # HTTP сервер, роутинг
+├── main.go              # HTTP сервер, загрузка каталога
 ├── handlers/
-│   ├── chat.go          # POST /api/chat — OpenAI запросы
-│   └── menu.go          # GET  /api/menu — список блюд
+│   ├── chat.go          # POST /api/chat — OpenAI с контекстом каталога
+│   └── menu.go          # GET  /api/catalog — список товаров
 ├── models/
-│   └── types.go         # Go структуры данных
+│   └── types.go         # Go-структуры данных (Product, ProductDetail, etc.)
 ├── data/
-│   └── menu.json        # Меню ресторана (редактируй здесь!)
+│   ├── products.json    # Список товаров (страница 2) — формат API ekt.kz
+│   ├── products2.json   # Список товаров (страница 1)
+│   └── detail.json      # Детальная информация о товаре
 ├── static/
-│   ├── index.html       # Главная страница
+│   ├── index.html       # Сайт в стиле ekt.kz (синий/красный)
 │   ├── style.css        # Стили
-│   └── chat.js          # Чат-виджет
-├── Dockerfile           # Docker образ
-└── .env.example         # Пример переменных окружения
+│   └── chat.js          # AI чат-виджет
+├── Dockerfile
+└── README.md
 ```
 
 ---
 
-## 🌐 API Endpoints
+## 🌐 API
 
-| Метод | URL | Описание |
-|-------|-----|----------|
-| `GET` | `/` | Главная страница сайта |
-| `GET` | `/api/menu` | Полное меню в JSON |
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| `GET` | `/` | Главная страница |
+| `GET` | `/api/catalog` | Все товары из JSON файлов |
 | `POST` | `/api/chat` | Вопрос AI-ассистенту |
-| `GET` | `/health` | Проверка работы сервера |
+| `GET` | `/health` | Статус сервера |
 
-### Пример запроса к чату:
-
+### Пример чата:
 ```bash
 curl -X POST http://localhost:8080/api/chat \
   -H "Content-Type: application/json" \
-  -d '{"message": "Что есть в меню?"}'
-```
-
-Ответ:
-```json
-{"reply": "В нашем меню есть донеры, гарниры, соусы и напитки! 🌯..."}
+  -d '{"message": "Нужен автоматический выключатель 160А, что есть?"}'
 ```
 
 ---
 
-## 🍽️ Настройка меню
+## 📦 Формат JSON файлов
 
-Отредактируй файл `data/menu.json` — добавь свои блюда, цены и описания.
-Перезапусти сервер после изменений.
+Файлы совместимы с API ekt.kz (`/api/products/` и `/api/products/detail`):
+
+**products.json / products2.json:**
+```json
+{
+  "page": 1, "per_page": 20, "count": 20,
+  "items": [
+    { "id": 515291, "name": "...", "article": "...", "price": 64920, "image": "...", "url": "...", "url_api_detail": "..." }
+  ]
+}
+```
+
+**detail.json:**
+```json
+{
+  "id": 515291, "name": "...", "article": "...",
+  "description": "...", "price": 64920, "quantity": 23,
+  "stores": [{"id": 3, "name": "Шымкент", "quantity": 2}],
+  "properties": { ... }
+}
+```
+
+---
+
+## ➕ Добавить больше товаров
+
+Просто положи дополнительные файлы JSON в папку `data/`:
+- `products3.json`, `products4.json` и т.д.
+- Обнови `main.go` → массив `files` чтобы подключить их
 
 ---
 
 ## 🐳 Docker
 
 ```bash
-# Собрать образ
-docker build -t donerka-house .
-
-# Запустить
-docker run -p 8080:8080 -e OPENAI_API_KEY=sk-... donerka-house
+docker build -t ekt-ai .
+docker run -p 8080:8080 -e OPENAI_API_KEY=sk-... ekt-ai
 ```
 
 ---
 
-## ☁️ Деплой
+## ☁️ Деплой на Railway
 
-### Railway (рекомендуется, бесплатный тариф)
-1. Зайди на [railway.app](https://railway.app)
-2. "New Project" → "Deploy from GitHub"
-3. Выбери этот репозиторий
-4. В переменных окружения добавь `OPENAI_API_KEY`
-5. Railway автоматически определит Dockerfile и задеплоит
-
-### Render
-1. [render.com](https://render.com) → "New Web Service"
-2. Подключи GitHub репо
-3. Build Command: `go build -o server .`
-4. Start Command: `./server`
-5. Добавь env var `OPENAI_API_KEY`
+1. [railway.app](https://railway.app) → "New Project" → "Deploy from GitHub"
+2. Выбери: `BAITC-Hacks/hack-400d70df-donerka-house`
+3. Variables: `OPENAI_API_KEY=sk-...`
+4. Готово — Railway соберёт через Dockerfile автоматически
 
 ---
 
-## 🔑 Получить OpenAI API Key
+## 🔑 OpenAI API Key
 
-1. Зарегистрируйся на [platform.openai.com](https://platform.openai.com)
-2. Перейди в [API Keys](https://platform.openai.com/api-keys)
-3. Нажми "Create new secret key"
-4. Скопируй ключ и вставь в `.env`
-
-> **Модель**: используется `gpt-4o-mini` (~\$0.0002 за запрос — очень дёшево)
+[platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+Модель `gpt-4o-mini` — ~\$0.0002 за запрос
 
 ---
 
-## 🛠️ Технологии
+## 🛠️ Стек
 
 - **Backend**: Go 1.21 (`net/http`)
-- **AI**: OpenAI GPT-4o-mini (`go-openai`)
-- **Frontend**: Vanilla HTML/CSS/JS (без фреймворков)
-- **Деплой**: Docker + Railway/Render
+- **AI**: OpenAI GPT-4o-mini
+- **Data**: JSON файлы из API ekt.kz
+- **Frontend**: HTML/CSS/JS (без фреймворков, стиль ekt.kz)
+- **Deploy**: Docker + Railway/Render

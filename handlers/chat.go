@@ -5,57 +5,102 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/BAITC-Hacks/hack-400d70df-donerka-house/models"
 	openai "github.com/sashabaranov/go-openai"
 )
 
-// buildSystemPrompt creates the AI system prompt using the menu data
-func buildSystemPrompt(menu *models.Menu) string {
-	prompt := fmt.Sprintf(`Ты — дружелюбный AI-ассистент ресторана "%s".
+const systemPromptBase = `Ты — умный AI-ассистент интернет-магазина ГК Электрокомплект (ekt.kz).
 
-О ресторане:
-- Адрес: %s
-- Телефон: %s
-- Режим работы: %s
-- Описание: %s
+О компании:
+- Название: ГК Электрокомплект (сайт: ekt.kz)
+- Крупнейший производитель и поставщик электротехнической продукции в Казахстане
+- Офисы в городах: Алматы, Астана, Шымкент, Тараз, Атырау, Актау, Караганда, Талдыкорган, Усть-Каменогорск
+- Телефон: +7 (727) 346-88-88 | +7 (778) 046-88-88
+- B2B платформа: pro.ekt.kz
+- WhatsApp: +7 (778) 276-88-88
 
-Твоя задача — помогать клиентам:
-1. Отвечать на вопросы о меню (состав, цены, вес блюд)
-2. Рекомендовать блюда по предпочтениям
-3. Информировать об акциях и комбо-предложениях
-4. Отвечать на вопросы о режиме работы и контактах
+Категории товаров:
+- Кабель / Провод
+- Светильники / Лампы
+- Низковольтная аппаратура (автоматические выключатели, реле, контакторы)
+- Кабеленесущие системы
+- Изделия для монтажа и инструмент
+- Шкафы / Щиты
+- Розетки / Выключатели / Коробки
+- Автоматизация
+- Видеонаблюдение / СКУД / Сигнализация
+- Инструмент / КИП
 
-Полное меню:
-`, menu.Restaurant.Name, menu.Restaurant.Address,
-		menu.Restaurant.Phone, menu.Restaurant.WorkingHours,
-		menu.Restaurant.Description)
+Сервис:
+- Доставка по всему Казахстану
+- Онлайн-оплата (AirbaPay, Cloudpayments)
+- Рассрочка
+- Возврат и обмен
+- Щиты под заказ
 
-	for _, cat := range menu.Categories {
-		prompt += fmt.Sprintf("\n## %s\n", cat.Name)
-		for _, item := range cat.Items {
-			spicyTag := ""
-			if item.Spicy {
-				spicyTag = " 🌶️ (острое)"
-			}
-			prompt += fmt.Sprintf("- %s%s — %g тг (%s): %s\n",
-				item.Name, spicyTag, item.Price, item.Weight, item.Description)
+Твоя задача:
+1. Помогать клиентам найти нужные товары по описанию или артикулу
+2. Отвечать на вопросы о наличии, ценах, характеристиках
+3. Консультировать по выбору оборудования
+4. Направлять на нужные разделы сайта
+5. Помогать с оформлением заказа
+
+Важно:
+- Все цены в тенге (тг / KZT)
+- Если клиент спрашивает конкретный товар — ищи в каталоге ниже
+- Если товара нет в каталоге — предложи обратиться на сайт ekt.kz или позвонить
+- Отвечай на русском (или на языке клиента)
+- Будь лаконичным, профессиональным и дружелюбным
+
+`
+
+// buildSystemPrompt creates the AI prompt with embedded product data
+func buildSystemPrompt(catalog *models.Catalog) string {
+	prompt := systemPromptBase
+
+	if len(catalog.Products) > 0 {
+		prompt += "## Примеры товаров из каталога:\n"
+		// Include up to 50 products in context
+		limit := len(catalog.Products)
+		if limit > 50 {
+			limit = 50
+		}
+		for _, p := range catalog.Products[:limit] {
+			prompt += fmt.Sprintf("- [Арт: %s] %s — %.0f тг | %s\n",
+				p.Article, p.Name, p.Price, p.URL)
 		}
 	}
 
-	prompt += `
-Правила общения:
-- Общайся вежливо и дружелюбно
-- Отвечай кратко и по делу
-- Используй эмодзи умеренно 🌯
-- Если не знаешь ответа — предложи позвонить в ресторан
-- Отвечай на русском языке (если пользователь не пишет на другом языке)
-`
+	if catalog.Detail != nil {
+		d := catalog.Detail
+		prompt += fmt.Sprintf(`
+## Пример детальной информации о товаре:
+Артикул: %s
+Название: %s
+Цена: %.0f тг
+Описание: %s
+Наличие (общее): %d шт.
+`, d.Article, d.Name, d.Price, d.Description, d.Quantity)
+
+		// Show stores with stock
+		var inStock []string
+		for _, s := range d.Stores {
+			if s.Quantity > 0 {
+				inStock = append(inStock, fmt.Sprintf("%s: %d шт.", s.Name, s.Quantity))
+			}
+		}
+		if len(inStock) > 0 {
+			prompt += "Наличие по складам: " + strings.Join(inStock, ", ") + "\n"
+		}
+	}
+
 	return prompt
 }
 
-// ChatHandler handles POST /api/chat requests
-func ChatHandler(menu *models.Menu) http.HandlerFunc {
+// ChatHandler handles POST /api/chat
+func ChatHandler(catalog *models.Catalog) http.HandlerFunc {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -68,73 +113,44 @@ func ChatHandler(menu *models.Menu) http.HandlerFunc {
 		}
 
 		var req models.ChatRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Message == "" {
 			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Invalid request body"})
+			json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Invalid or empty message"})
 			return
 		}
 
-		if req.Message == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Message cannot be empty"})
-			return
-		}
-
-		// If no API key, return a demo response
+		// Demo mode fallback
 		if apiKey == "" {
-			demoReply := demoResponse(req.Message, menu)
-			json.NewEncoder(w).Encode(models.ChatResponse{Reply: demoReply})
+			json.NewEncoder(w).Encode(models.ChatResponse{
+				Reply: "Здравствуйте! 👋 Я AI-ассистент ГК Электрокомплект.\n\n" +
+					"(Демо-режим — настройте OPENAI_API_KEY для полноценного ИИ)\n\n" +
+					"Вы можете найти нужный товар на сайте ekt.kz или позвоните нам:\n" +
+					"📞 +7 (727) 346-88-88",
+			})
 			return
 		}
 
 		client := openai.NewClient(apiKey)
-		systemPrompt := buildSystemPrompt(menu)
+		systemPrompt := buildSystemPrompt(catalog)
 
 		resp, err := client.CreateChatCompletion(r.Context(), openai.ChatCompletionRequest{
 			Model: "gpt-4o-mini",
 			Messages: []openai.ChatCompletionMessage{
-				{
-					Role:    openai.ChatMessageRoleSystem,
-					Content: systemPrompt,
-				},
-				{
-					Role:    openai.ChatMessageRoleUser,
-					Content: req.Message,
-				},
+				{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
+				{Role: openai.ChatMessageRoleUser, Content: req.Message},
 			},
-			MaxTokens:   500,
-			Temperature: 0.7,
+			MaxTokens:   600,
+			Temperature: 0.6,
 		})
 
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(models.ErrorResponse{Error: "AI service error: " + err.Error()})
+			json.NewEncoder(w).Encode(models.ErrorResponse{Error: "AI error: " + err.Error()})
 			return
 		}
 
-		reply := resp.Choices[0].Message.Content
-		json.NewEncoder(w).Encode(models.ChatResponse{Reply: reply})
+		json.NewEncoder(w).Encode(models.ChatResponse{
+			Reply: resp.Choices[0].Message.Content,
+		})
 	}
-}
-
-// demoResponse returns a simple rule-based response when no API key is set
-func demoResponse(message string, menu *models.Menu) string {
-	// Simple keyword matching for demo mode
-	msg := message
-
-	// Check for common keywords
-	for _, cat := range menu.Categories {
-		for _, item := range cat.Items {
-			_ = item
-		}
-	}
-
-	_ = msg
-
-	return fmt.Sprintf(
-		"👋 Привет! Я AI-ассистент %s. "+
-			"(Демо-режим: добавьте OPENAI_API_KEY для полноценного ИИ)\n\n"+
-			"Наше меню доступно на сайте. Звоните: %s",
-		menu.Restaurant.Name, menu.Restaurant.Phone,
-	)
 }

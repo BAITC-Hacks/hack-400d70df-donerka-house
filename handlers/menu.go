@@ -7,8 +7,8 @@ import (
 	"github.com/BAITC-Hacks/hack-400d70df-donerka-house/models"
 )
 
-// MenuHandler handles GET /api/menu requests
-func MenuHandler(menu *models.Menu) http.HandlerFunc {
+// CatalogHandler handles GET /api/catalog — returns product list
+func CatalogHandler(catalog *models.Catalog) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -18,6 +18,12 @@ func MenuHandler(menu *models.Menu) http.HandlerFunc {
 			return
 		}
 
-		json.NewEncoder(w).Encode(menu)
+		page := models.ProductsPage{
+			Page:    1,
+			PerPage: len(catalog.Products),
+			Count:   len(catalog.Products),
+			Items:   catalog.Products,
+		}
+		json.NewEncoder(w).Encode(page)
 	}
 }

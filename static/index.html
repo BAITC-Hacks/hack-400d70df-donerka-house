@@ -3,75 +3,164 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Donerka House 🌯</title>
+  <title>ГК Электрокомплект — AI Ассистент | ekt.kz</title>
   <link rel="stylesheet" href="style.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 </head>
 <body>
 
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="container topbar-inner">
+      <div class="topbar-cities">
+        <span class="city-icon">📍</span>
+        <select class="city-select" id="citySelect">
+          <option>Алматы</option>
+          <option>Астана</option>
+          <option>Шымкент</option>
+          <option>Тараз</option>
+          <option>Атырау</option>
+          <option>Актау</option>
+          <option>Караганда</option>
+          <option>Талдыкорган</option>
+          <option>Усть-Каменогорск</option>
+        </select>
+      </div>
+      <div class="topbar-links">
+        <a href="https://ekt.kz/about/" target="_blank">Покупателям</a>
+        <a href="https://pro.ekt.kz/" target="_blank">B2B — ЕКТ PRO</a>
+        <a href="https://ekt.kz/personal/" target="_blank">Личный кабинет</a>
+      </div>
+    </div>
+  </div>
+
   <!-- HEADER -->
   <header class="header">
-    <div class="container">
-      <div class="logo">🌯 Donerka House</div>
-      <nav class="nav">
-        <a href="#menu">Меню</a>
-        <a href="#about">О нас</a>
-        <a href="#contacts">Контакты</a>
-      </nav>
+    <div class="container header-inner">
+      <a href="https://ekt.kz" target="_blank" class="logo">
+        <div class="logo-icon">⚡</div>
+        <div class="logo-text">
+          <span class="logo-main">Электрокомплект</span>
+          <span class="logo-sub">ekt.kz</span>
+        </div>
+      </a>
+
+      <div class="search-bar">
+        <input type="text" id="searchInput" placeholder="Поиск по каталогу (артикул, название, бренд)..." />
+        <button onclick="searchProducts()" class="search-btn">🔍</button>
+      </div>
+
+      <div class="header-contacts">
+        <div class="phone">📞 <a href="tel:+77273468888">+7 (727) 346-88-88</a></div>
+        <div class="phone-sub">+7 (778) 046-88-88</div>
+      </div>
     </div>
   </header>
 
-  <!-- HERO SECTION -->
+  <!-- NAV CATEGORIES -->
+  <nav class="cat-nav">
+    <div class="container">
+      <button class="cat-nav-btn active" data-cat="all" onclick="filterCat(this)">🔌 Все товары</button>
+      <button class="cat-nav-btn" data-cat="kabel" onclick="filterCat(this)">🔋 Кабель/Провод</button>
+      <button class="cat-nav-btn" data-cat="svetilniki" onclick="filterCat(this)">💡 Светильники</button>
+      <button class="cat-nav-btn" data-cat="nizkovoltnaya" onclick="filterCat(this)">⚡ Низковольтная</button>
+      <button class="cat-nav-btn" data-cat="rozetki" onclick="filterCat(this)">🔌 Розетки/Щиты</button>
+      <button class="cat-nav-btn" data-cat="avtomatizatsiya" onclick="filterCat(this)">🤖 Автоматизация</button>
+    </div>
+  </nav>
+
+  <!-- HERO BANNER -->
   <section class="hero">
     <div class="container">
       <div class="hero-content">
-        <h1>Лучшие донеры<br /><span class="accent">в городе</span></h1>
-        <p class="hero-sub">Свежие ингредиенты, секретные соусы и быстрое обслуживание каждый день с 10:00 до 23:00</p>
+        <div class="hero-badge">⚡ AI-Ассистент теперь доступен</div>
+        <h1>ГК Электрокомплект</h1>
+        <p class="hero-desc">Крупнейший поставщик электротехнической продукции в Казахстане. Более 50 000 товаров в наличии.</p>
+        <div class="hero-stats">
+          <div class="stat"><span class="stat-num" id="totalProducts">40+</span><span class="stat-label">товаров в каталоге</span></div>
+          <div class="stat"><span class="stat-num">9</span><span class="stat-label">городов Казахстана</span></div>
+          <div class="stat"><span class="stat-num">50K+</span><span class="stat-label">позиций на складе</span></div>
+        </div>
         <div class="hero-btns">
-          <a href="#menu" class="btn btn-primary">Смотреть меню</a>
-          <button class="btn btn-outline" onclick="openChat()">🤖 Спросить ИИ</button>
+          <a href="#catalog" class="btn btn-primary">📦 Перейти к каталогу</a>
+          <button class="btn btn-secondary" onclick="openChat()">🤖 Спросить AI-ассистента</button>
         </div>
       </div>
-      <div class="hero-img">🌯</div>
-    </div>
-  </section>
-
-  <!-- MENU SECTION -->
-  <section class="section" id="menu">
-    <div class="container">
-      <h2 class="section-title">Наше меню</h2>
-      <div class="category-tabs" id="categoryTabs"></div>
-      <div class="menu-grid" id="menuGrid">
-        <div class="loading">Загружаем меню...</div>
+      <div class="hero-visual">
+        <div class="hero-icons">
+          <div class="hero-icon-item">⚡</div>
+          <div class="hero-icon-item">🔌</div>
+          <div class="hero-icon-item">💡</div>
+          <div class="hero-icon-item">🔋</div>
+        </div>
       </div>
     </div>
   </section>
 
-  <!-- ABOUT SECTION -->
-  <section class="section section-dark" id="about">
+  <!-- CATALOG SECTION -->
+  <section class="section" id="catalog">
     <div class="container">
-      <h2 class="section-title">О нас</h2>
-      <div class="features">
-        <div class="feature">
-          <div class="feature-icon">🥩</div>
-          <h3>Свежее мясо</h3>
-          <p>Только свежее мясо высшего качества каждый день</p>
+      <div class="section-header">
+        <h2 class="section-title">Каталог продукции</h2>
+        <div class="catalog-meta">
+          <span id="catalogCount">Загружаем...</span>
+          <select class="sort-select" onchange="sortProducts(this.value)">
+            <option value="default">По умолчанию</option>
+            <option value="price-asc">Цена: по возрастанию</option>
+            <option value="price-desc">Цена: по убыванию</option>
+            <option value="name">По названию</option>
+          </select>
         </div>
-        <div class="feature">
-          <div class="feature-icon">🌿</div>
-          <h3>Свежие овощи</h3>
-          <p>Овощи и зелень поставляются ежедневно с фермерских рынков</p>
+      </div>
+
+      <div id="catalogGrid" class="catalog-grid">
+        <div class="loading-state">
+          <div class="loading-spinner">⚡</div>
+          <p>Загружаем каталог...</p>
         </div>
-        <div class="feature">
-          <div class="feature-icon">🔥</div>
-          <h3>Секретный соус</h3>
-          <p>Наш фирменный соус по особому рецепту — изюминка каждого донера</p>
+      </div>
+
+      <div class="load-more-wrap" id="loadMoreWrap" style="display:none">
+        <button class="btn btn-outline" onclick="loadMore()">Показать ещё</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES SECTION -->
+  <section class="section section-gray">
+    <div class="container">
+      <h2 class="section-title">Почему выбирают нас</h2>
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">🏭</div>
+          <h3>Собственное производство</h3>
+          <p>Кабельно-проводниковая продукция, трубы ПНД и ПВХ, кабельный канал, щитовое оборудование</p>
         </div>
-        <div class="feature">
-          <div class="feature-icon">⚡</div>
-          <h3>Быстро</h3>
-          <p>Ваш заказ будет готов за 5 минут</p>
+        <div class="feature-card">
+          <div class="feature-icon">📦</div>
+          <h3>Огромный склад</h3>
+          <p>50 000+ позиций в наличии, складские запасы во всех 9 городах Казахстана</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🚚</div>
+          <h3>Быстрая доставка</h3>
+          <p>Доставка по всему Казахстану. Самовывоз из наших офисов в вашем городе</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">💳</div>
+          <h3>Удобная оплата</h3>
+          <p>Онлайн-оплата, рассрочка, банковский перевод. AirbaPay, Cloudpayments</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🤝</div>
+          <h3>B2B платформа</h3>
+          <p>Специальные условия для бизнеса на pro.ekt.kz. Оптовые цены, персональный менеджер</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🤖</div>
+          <h3>AI-ассистент 24/7</h3>
+          <p>Наш ИИ-консультант поможет найти нужный товар, ответит на технические вопросы</p>
         </div>
       </div>
     </div>
@@ -80,22 +169,43 @@
   <!-- CONTACTS SECTION -->
   <section class="section" id="contacts">
     <div class="container">
-      <h2 class="section-title">Контакты</h2>
-      <div class="contacts-grid">
-        <div class="contact-card">
-          <div class="contact-icon">📍</div>
-          <h3>Адрес</h3>
-          <p id="restaurantAddress">Загружаем...</p>
+      <h2 class="section-title">Наши офисы</h2>
+      <div class="offices-grid">
+        <div class="office-card">
+          <div class="office-city">🏙️ Алматы</div>
+          <div class="office-phone">+7 (727) 346-88-88</div>
         </div>
-        <div class="contact-card">
-          <div class="contact-icon">📞</div>
-          <h3>Телефон</h3>
-          <p id="restaurantPhone">Загружаем...</p>
+        <div class="office-card">
+          <div class="office-city">🏙️ Астана</div>
+          <div class="office-phone">+7 (778) 046-88-88</div>
         </div>
-        <div class="contact-card">
-          <div class="contact-icon">🕐</div>
-          <h3>Режим работы</h3>
-          <p id="restaurantHours">Загружаем...</p>
+        <div class="office-card">
+          <div class="office-city">🏙️ Шымкент</div>
+          <div class="office-phone">ул. Байдукова | Тассай</div>
+        </div>
+        <div class="office-card">
+          <div class="office-city">🏙️ Атырау</div>
+          <div class="office-phone">В наличии</div>
+        </div>
+        <div class="office-card">
+          <div class="office-city">🏙️ Тараз</div>
+          <div class="office-phone">В наличии</div>
+        </div>
+        <div class="office-card">
+          <div class="office-city">🏙️ Актау</div>
+          <div class="office-phone">В наличии</div>
+        </div>
+        <div class="office-card">
+          <div class="office-city">🏙️ Караганда</div>
+          <div class="office-phone">В наличии</div>
+        </div>
+        <div class="office-card">
+          <div class="office-city">🏙️ Нур-Султан</div>
+          <div class="office-phone">В наличии</div>
+        </div>
+        <div class="office-card">
+          <div class="office-city">🏙️ Талдыкорган</div>
+          <div class="office-phone">В наличии</div>
         </div>
       </div>
     </div>
@@ -103,124 +213,191 @@
 
   <!-- FOOTER -->
   <footer class="footer">
-    <div class="container">
-      <p>🌯 Donerka House — Все права защищены</p>
+    <div class="container footer-inner">
+      <div class="footer-logo">⚡ ГК Электрокомплект</div>
+      <div class="footer-links">
+        <a href="https://ekt.kz/about/" target="_blank">О компании</a>
+        <a href="https://ekt.kz/about/contacts/" target="_blank">Контакты</a>
+        <a href="https://ekt.kz/about/howto/" target="_blank">Как заказать</a>
+        <a href="https://ekt.kz/return/" target="_blank">Возврат</a>
+        <a href="https://ekt.kz/polytic/" target="_blank">Конфиденциальность</a>
+      </div>
+      <div class="footer-copy">© 2026 ekt.kz — Все права защищены</div>
     </div>
   </footer>
 
   <!-- CHAT WIDGET -->
-  <div class="chat-bubble" id="chatBubble" onclick="toggleChat()" title="Спросить ИИ-ассистента">
-    <span class="chat-bubble-icon" id="chatBubbleIcon">🤖</span>
-    <span class="chat-bubble-badge" id="chatBubbleBadge" style="display:none">1</span>
+  <div class="chat-bubble" id="chatBubble" onclick="toggleChat()" title="Спросить AI-ассистента">
+    <span id="chatBubbleIcon">🤖</span>
+    <div class="chat-bubble-pulse"></div>
   </div>
 
   <div class="chat-widget" id="chatWidget">
     <div class="chat-header">
-      <div class="chat-header-info">
-        <div class="chat-avatar">🤖</div>
+      <div class="chat-header-left">
+        <div class="chat-avatar">⚡</div>
         <div>
-          <div class="chat-title">Donerka AI</div>
-          <div class="chat-status">Онлайн • Готов помочь</div>
+          <div class="chat-name">EKT AI Ассистент</div>
+          <div class="chat-status-dot">● Онлайн</div>
         </div>
       </div>
-      <button class="chat-close" onclick="toggleChat()">✕</button>
+      <button class="chat-close-btn" onclick="toggleChat()">✕</button>
     </div>
 
     <div class="chat-messages" id="chatMessages">
-      <div class="message bot-message">
-        <div class="message-bubble">
-          Привет! 👋 Я AI-ассистент Donerka House.<br/>
-          Могу рассказать о меню, ценах и составе блюд.<br/>
-          Что вас интересует? 🌯
+      <div class="msg bot">
+        <div class="msg-bubble">
+          Здравствуйте! 👋 Я AI-консультант ГК Электрокомплект.<br/><br/>
+          Помогу найти нужный товар, расскажу о наличии, характеристиках и ценах.<br/><br/>
+          Что вас интересует? ⚡
         </div>
-        <div class="message-time">только что</div>
+        <div class="msg-time">сейчас</div>
       </div>
     </div>
 
-    <div class="chat-suggestions" id="chatSuggestions">
-      <button class="suggestion-btn" onclick="sendSuggestion(this)">Что есть в меню?</button>
-      <button class="suggestion-btn" onclick="sendSuggestion(this)">Есть ли острые блюда?</button>
-      <button class="suggestion-btn" onclick="sendSuggestion(this)">Какие комбо есть?</button>
-      <button class="suggestion-btn" onclick="sendSuggestion(this)">Режим работы?</button>
+    <div class="chat-chips" id="chatChips">
+      <button class="chip" onclick="sendChip(this)">Что есть в наличии?</button>
+      <button class="chip" onclick="sendChip(this)">Нужен автоматический выключатель</button>
+      <button class="chip" onclick="sendChip(this)">Какие бренды продаёте?</button>
+      <button class="chip" onclick="sendChip(this)">Как сделать заказ?</button>
+      <button class="chip" onclick="sendChip(this)">Есть ли доставка в мой город?</button>
     </div>
 
-    <div class="chat-input-area">
-      <input
-        type="text"
-        id="chatInput"
-        class="chat-input"
-        placeholder="Напишите вопрос..."
-        onkeypress="handleKeyPress(event)"
-        maxlength="500"
-      />
-      <button class="chat-send" id="chatSendBtn" onclick="sendMessage()">
-        ➤
-      </button>
+    <div class="chat-input-row">
+      <input id="chatInput" class="chat-input" type="text"
+        placeholder="Напишите вопрос о товаре..."
+        onkeypress="if(event.key==='Enter') sendMsg()" maxlength="500" />
+      <button class="chat-send-btn" id="chatSendBtn" onclick="sendMsg()">➤</button>
     </div>
   </div>
 
   <script src="chat.js"></script>
   <script>
-    // Load menu from API
-    async function loadMenu() {
+    // === Catalog State ===
+    let allProducts = [];
+    let filtered = [];
+    let displayCount = 20;
+    let currentSort = 'default';
+    let currentCat = 'all';
+
+    // === Load catalog from API ===
+    async function loadCatalog() {
       try {
-        const res = await fetch('/api/menu');
+        const res = await fetch('/api/catalog');
         const data = await res.json();
-
-        // Update contact info
-        document.getElementById('restaurantAddress').textContent = data.restaurant.address;
-        document.getElementById('restaurantPhone').textContent = data.restaurant.phone;
-        document.getElementById('restaurantHours').textContent = data.restaurant.working_hours;
-
-        // Render menu
-        renderMenu(data.categories);
+        allProducts = data.items || [];
+        filtered = [...allProducts];
+        document.getElementById('totalProducts').textContent = allProducts.length + '+';
+        renderCatalog();
       } catch (e) {
-        document.getElementById('menuGrid').innerHTML = '<p class="error">Не удалось загрузить меню. Попробуйте позже.</p>';
+        document.getElementById('catalogGrid').innerHTML =
+          '<div class="error-state">⚠️ Не удалось загрузить каталог. <a href="https://ekt.kz/catalog/" target="_blank">Перейдите на ekt.kz</a></div>';
       }
     }
 
-    function renderMenu(categories) {
-      const tabsEl = document.getElementById('categoryTabs');
-      const gridEl = document.getElementById('menuGrid');
+    // === Render products ===
+    function renderCatalog() {
+      const grid = document.getElementById('catalogGrid');
+      const count = document.getElementById('catalogCount');
+      count.textContent = `Показано: ${Math.min(displayCount, filtered.length)} из ${filtered.length} товаров`;
 
-      // Render tabs
-      tabsEl.innerHTML = categories.map((cat, i) =>
-        `<button class="tab-btn ${i === 0 ? 'active' : ''}" onclick="filterCategory('${cat.id}', this)">${cat.name}</button>`
-      ).join('');
+      const visible = filtered.slice(0, displayCount);
 
-      // Render all items
-      gridEl.innerHTML = categories.map(cat =>
-        cat.items.map(item => `
-          <div class="menu-card" data-category="${cat.id}">
-            <div class="menu-card-emoji">${getCategoryEmoji(cat.id)}</div>
-            <div class="menu-card-body">
-              <div class="menu-card-name">${item.name} ${item.spicy ? '🌶️' : ''}</div>
-              <div class="menu-card-desc">${item.description}</div>
-              <div class="menu-card-footer">
-                <span class="menu-card-weight">${item.weight}</span>
-                <span class="menu-card-price">${item.price} тг</span>
-              </div>
+      if (visible.length === 0) {
+        grid.innerHTML = '<div class="empty-state">😔 Товары не найдены. Попробуйте изменить запрос.</div>';
+        document.getElementById('loadMoreWrap').style.display = 'none';
+        return;
+      }
+
+      grid.innerHTML = visible.map(p => `
+        <div class="product-card" data-url="${p.url}">
+          <div class="product-img-wrap">
+            ${p.image
+              ? `<img src="${p.image}" alt="${p.name}" class="product-img" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+              : ''}
+            <div class="product-img-placeholder" style="${p.image ? 'display:none' : ''}">⚡</div>
+          </div>
+          <div class="product-body">
+            <div class="product-article">Арт: ${p.article || '—'}</div>
+            <div class="product-name">${p.name}</div>
+            <div class="product-footer">
+              <div class="product-price">${p.price ? p.price.toLocaleString('ru-KZ') + ' тг' : 'По запросу'}</div>
+              <a href="${p.url}" target="_blank" class="product-btn">Подробнее →</a>
             </div>
           </div>
-        `).join('')
-      ).join('');
+        </div>
+      `).join('');
+
+      document.getElementById('loadMoreWrap').style.display =
+        filtered.length > displayCount ? 'block' : 'none';
     }
 
-    function filterCategory(id, btn) {
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    // === Load more ===
+    function loadMore() {
+      displayCount += 20;
+      renderCatalog();
+    }
+
+    // === Search ===
+    function searchProducts() {
+      const q = document.getElementById('searchInput').value.toLowerCase().trim();
+      displayCount = 20;
+      if (!q) {
+        filtered = [...allProducts];
+      } else {
+        filtered = allProducts.filter(p =>
+          p.name.toLowerCase().includes(q) ||
+          (p.article && p.article.toLowerCase().includes(q))
+        );
+      }
+      applyCatFilter();
+      applySort();
+      renderCatalog();
+    }
+
+    // === Filter by category ===
+    function filterCat(btn) {
+      document.querySelectorAll('.cat-nav-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
+      currentCat = btn.dataset.cat;
+      displayCount = 20;
 
-      document.querySelectorAll('.menu-card').forEach(card => {
-        card.style.display = (id === 'all' || card.dataset.category === id) ? 'flex' : 'none';
+      const q = document.getElementById('searchInput').value.toLowerCase().trim();
+      filtered = allProducts.filter(p => {
+        const matchSearch = !q || p.name.toLowerCase().includes(q) || (p.article && p.article.toLowerCase().includes(q));
+        const matchCat = currentCat === 'all' || (p.url && p.url.includes(currentCat));
+        return matchSearch && matchCat;
       });
+      applySort();
+      renderCatalog();
     }
 
-    function getCategoryEmoji(id) {
-      const emojis = { doners: '🌯', boxes: '📦', sides: '🍟', sauces: '🥫', drinks: '🥤', combos: '🎁' };
-      return emojis[id] || '🍽️';
+    function applyCatFilter() {
+      if (currentCat !== 'all') {
+        filtered = filtered.filter(p => p.url && p.url.includes(currentCat));
+      }
     }
 
-    loadMenu();
+    // === Sort ===
+    function sortProducts(val) {
+      currentSort = val;
+      applySort();
+      renderCatalog();
+    }
+
+    function applySort() {
+      if (currentSort === 'price-asc') filtered.sort((a,b) => (a.price||0) - (b.price||0));
+      else if (currentSort === 'price-desc') filtered.sort((a,b) => (b.price||0) - (a.price||0));
+      else if (currentSort === 'name') filtered.sort((a,b) => a.name.localeCompare(b.name, 'ru'));
+    }
+
+    // Search on Enter
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('searchInput').addEventListener('keypress', e => {
+        if (e.key === 'Enter') searchProducts();
+      });
+      loadCatalog();
+    });
   </script>
 </body>
 </html>
