@@ -146,22 +146,7 @@ func CartHandler(catalog *models.Catalog, store *CartStore) http.HandlerFunc {
 		case http.MethodGet:
 			writeJSON(w, store.snapshot(sessionID))
 		case http.MethodPost:
-			var req models.CartRequest
-			decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10))
-			if err := decoder.Decode(&req); err != nil {
-				writeJSONError(w, http.StatusBadRequest, "Invalid cart request")
-				return
-			}
-			product := findProductByReference(catalog, req.Article)
-			if product == nil {
-				writeJSONError(w, http.StatusNotFound, "Product was not found in the catalog")
-				return
-			}
-			if message := validateCartQuantity(store, sessionID, *product, req.Quantity); message != "" {
-				writeJSONError(w, http.StatusBadRequest, message)
-				return
-			}
-			writeJSON(w, store.add(sessionID, *product, req.Quantity))
+			writeJSONError(w, http.StatusConflict, "Добавление в корзину доступно только через подтверждённый сценарий чата: сначала выберите товар и количество, затем отправьте «да, добавь».")
 		case http.MethodDelete:
 			article := strings.TrimSpace(r.URL.Query().Get("article"))
 			writeJSON(w, store.remove(sessionID, article))
