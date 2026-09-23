@@ -44,6 +44,9 @@ func TestLiveSearchQueryPrefersProductReference(t *testing.T) {
 	if query := liveSearchQuery("Есть ли в наличии автомат 027228? Не добавляй в корзину."); query != "027228" {
 		t.Fatalf("expected product reference query, got %q", query)
 	}
+	if query := liveSearchQuery("Купи 3 штуки анкера PAL-2000 (70-120) UNIT"); query != "PAL-2000" {
+		t.Fatalf("expected hyphenated product reference query, got %q", query)
+	}
 	if query := liveSearchQuery("Что есть в наличии?"); query != "Что есть в наличии?" {
 		t.Fatalf("expected original natural-language query, got %q", query)
 	}

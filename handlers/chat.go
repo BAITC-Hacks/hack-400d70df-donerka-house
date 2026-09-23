@@ -67,12 +67,12 @@ const systemPromptBase = `Ты — умный AI-ассистент интерн
 
 `
 
-var addIntentPattern = regexp.MustCompile(`(?i)(добав(?:ь|ить|ьте)|хочу\s+куп|покупаю|купить|беру|выбира(?:ю|ем)|выбрал|выбрала|add\s+(?:this\s+)?(?:to\s+)?cart|buy|purchase|i\s+(?:choose|want\s+this)|this\s+one|that\s+one|first\s+one)`)
+var addIntentPattern = regexp.MustCompile(`(?i)(добав(?:ь|ить|ьте)|хочу\s+куп|куп(?:и|ить|лю)|покупаю|закаж(?:и|у|ем)|оформля(?:ю|ем)|беру|выбира(?:ю|ем)|выбрал|выбрала|add\s+(?:this\s+)?(?:to\s+)?cart|buy|purchase|i\s+(?:choose|want\s+this)|this\s+one|that\s+one|first\s+one)`)
 var quantityAfterLabelPattern = regexp.MustCompile(`(?i)(?:x|×|колич(?:ество|\-во)?|шт\.?|штук(?:и)?)\s*[:=]?\s*(\d+)`)
 var quantityBeforeUnitPattern = regexp.MustCompile(`(?i)\b(\d+)\s*(?:шт\.?|штук(?:и)?|pcs)`)
 var productChoicePattern = regexp.MustCompile(`(?i)(перв|втор|трет|четверт|номер\s*\d+|№\s*\d+|first|second|third|fourth)`)
 var availabilityQuestionPattern = regexp.MustCompile(`(?i)(налич|склад|остат|есть\s+ли|доступн|под\s+заказ|в\s+налич|stock|availab|inventory)`)
-var catalogReferenceTokenPattern = regexp.MustCompile(`\d`)
+var catalogReferencePattern = regexp.MustCompile(`(?i)[a-zа-я0-9]+(?:[-_/][a-zа-я0-9]+)+|[a-zа-я0-9]*[a-zа-я][a-zа-я0-9_/-]*\d[a-zа-я0-9_/-]*|\d{4,}`)
 
 // buildSystemPrompt creates the AI prompt with embedded product data.
 func buildSystemPrompt(catalog *models.Catalog, relevant ...[]models.Product) string {
@@ -243,6 +243,15 @@ func inferProductForAdd(catalog *models.Catalog, message string, contextProducts
 	if len(contextProducts) > 0 {
 		if selected := selectedProductFromContext(message, contextProducts[0]); selected != nil {
 			return selected
+		}
+		bestScore, bestIndex := 0, -1
+		for index, product := range contextProducts[0] {
+			if score := scoreProduct(product, tokenize(message)); score > bestScore {
+				bestScore, bestIndex = score, index
+			}
+		}
+		if bestIndex >= 0 {
+			return &contextProducts[0][bestIndex]
 		}
 		if len(contextProducts[0]) == 1 && regexp.MustCompile(`(?i)(этот|это|this|that)`).MatchString(message) {
 			return &contextProducts[0][0]
@@ -496,6 +505,18 @@ func ChatHandler(catalog *models.Catalog, store *CartStore, live *LiveCatalog, c
 			contextProducts = productsForResults(catalog, matchedProducts)
 		}
 
+		// Explicit purchase language is already customer consent. Resolve and
+		// add the validated product before asking the model for prose, so the
+		// model cannot turn a direct purchase request into a confirmation step.
+		if hasAddIntent(req.Message) {
+			action, cart, directReply := addToCartFromMessage(catalog, store, sessionID, req.Message, contextProducts)
+			if action != nil {
+				conversations.append(sessionID, req.Message, directReply, contextProducts)
+				writeJSON(w, models.ChatResponse{Reply: directReply, Products: matchedProducts, CartAction: action, Cart: cart})
+				return
+			}
+		}
+
 		if apiKey == "" {
 			action, cart, addReply := addToCartFromMessage(catalog, store, sessionID, req.Message, contextProducts)
 			reply := addReply
@@ -568,10 +589,22 @@ func ChatHandler(catalog *models.Catalog, store *CartStore, live *LiveCatalog, c
 }
 
 func liveSearchQuery(message string) string {
-	for _, token := range tokenize(message) {
-		if len(token) >= 4 && catalogReferenceTokenPattern.MatchString(token) {
-			return token
+	bestToken, bestScore := "", 0
+	for _, token := range catalogReferencePattern.FindAllString(message, -1) {
+		lower := strings.ToLower(token)
+		score := len([]rune(token))
+		if strings.IndexFunc(lower, unicode.IsLetter) >= 0 && strings.IndexFunc(lower, unicode.IsDigit) >= 0 {
+			score += 100
 		}
+		if strings.ContainsAny(token, "-_/\\") {
+			score += 20
+		}
+		if score > bestScore {
+			bestToken, bestScore = token, score
+		}
+	}
+	if bestToken != "" {
+		return bestToken
 	}
 	return message
 }

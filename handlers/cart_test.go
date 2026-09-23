@@ -105,3 +105,23 @@ func TestDemoChatAddsExplicitProductRequest(t *testing.T) {
 		t.Fatalf("expected cart summary, got %+v", chat.Cart)
 	}
 }
+
+func TestChatAddsExplicitPurchaseBeforeOpenAI(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "test-key-not-used")
+	store := NewCartStore()
+	handler := ChatHandler(testCatalog(), store, nil, NewConversationStore())
+	response := doJSONRequest(handler, http.MethodPost, "/api/chat", []byte(`{"message":"Купи 3 штуки товара 027228"}`), nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", response.Code)
+	}
+	var chat models.ChatResponse
+	if err := json.NewDecoder(response.Body).Decode(&chat); err != nil {
+		t.Fatal(err)
+	}
+	if chat.CartAction == nil || chat.CartAction.Article != "200300285_" || chat.CartAction.Quantity != 3 {
+		t.Fatalf("expected immediate cart action, got %+v", chat.CartAction)
+	}
+	if chat.Cart == nil || chat.Cart.Count != 3 {
+		t.Fatalf("expected immediate cart update, got %+v", chat.Cart)
+	}
+}
