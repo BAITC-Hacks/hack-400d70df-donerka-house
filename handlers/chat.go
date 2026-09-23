@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"unicode"
 
 	"github.com/BAITC-Hacks/hack-400d70df-donerka-house/models"
 	openai "github.com/sashabaranov/go-openai"
@@ -45,14 +46,13 @@ const systemPromptBase = `Ты — умный AI-ассистент интерн
 2. Отвечать на вопросы о наличии, ценах, характеристиках
 3. Консультировать по выбору оборудования
 4. Направлять на нужные разделы сайта
-5. Помогать с оформлением заказа
 
 Важно:
 - Все цены в тенге (тг / KZT)
-- Если клиент спрашивает конкретный товар — ищи в каталоге ниже
-- Если товара нет в каталоге — предложи обратиться на сайт ekt.kz или позвонить
+- Если клиент спрашивает конкретный товар — он будет показан отдельно карточками с фото, просто дай краткое текстовое описание
 - Отвечай на русском (или на языке клиента)
 - Будь лаконичным, профессиональным и дружелюбным
+- НЕ перечисляй товары списком в тексте — они будут показаны карточками автоматически
 
 `
 
@@ -61,42 +61,99 @@ func buildSystemPrompt(catalog *models.Catalog) string {
 	prompt := systemPromptBase
 
 	if len(catalog.Products) > 0 {
-		prompt += "## Примеры товаров из каталога:\n"
-		// Include up to 50 products in context
+		prompt += "## Товары в каталоге (используй для ответов):\n"
 		limit := len(catalog.Products)
 		if limit > 50 {
 			limit = 50
 		}
 		for _, p := range catalog.Products[:limit] {
-			prompt += fmt.Sprintf("- [Арт: %s] %s — %.0f тг | %s\n",
-				p.Article, p.Name, p.Price, p.URL)
+			prompt += fmt.Sprintf("- [Арт: %s] %s — %.0f тг\n",
+				p.Article, p.Name, p.Price)
 		}
 	}
 
 	if catalog.Detail != nil {
 		d := catalog.Detail
 		prompt += fmt.Sprintf(`
-## Пример детальной информации о товаре:
-Артикул: %s
-Название: %s
-Цена: %.0f тг
-Описание: %s
-Наличие (общее): %d шт.
-`, d.Article, d.Name, d.Price, d.Description, d.Quantity)
-
-		// Show stores with stock
-		var inStock []string
-		for _, s := range d.Stores {
-			if s.Quantity > 0 {
-				inStock = append(inStock, fmt.Sprintf("%s: %d шт.", s.Name, s.Quantity))
-			}
-		}
-		if len(inStock) > 0 {
-			prompt += "Наличие по складам: " + strings.Join(inStock, ", ") + "\n"
-		}
+## Пример детальной информации:
+Артикул: %s | Название: %s | Цена: %.0f тг | Наличие: %d шт.
+`, d.Article, d.Name, d.Price, d.Quantity)
 	}
 
 	return prompt
+}
+
+// tokenize splits a string into lowercase words, stripping punctuation
+func tokenize(s string) []string {
+	s = strings.ToLower(s)
+	fields := strings.FieldsFunc(s, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+	return fields
+}
+
+// scoreProduct returns how well a product matches the query tokens.
+// Higher = better match.
+func scoreProduct(p models.Product, tokens []string) int {
+	name := strings.ToLower(p.Name)
+	article := strings.ToLower(p.Article)
+	score := 0
+	for _, t := range tokens {
+		if len(t) < 2 {
+			continue
+		}
+		if strings.Contains(article, t) {
+			score += 10 // exact article match = highest priority
+		}
+		if strings.Contains(name, t) {
+			score += 3
+		}
+	}
+	return score
+}
+
+// searchProducts finds up to `limit` products matching the query
+func searchProducts(catalog *models.Catalog, query string, limit int) []models.ProductResult {
+	tokens := tokenize(query)
+	if len(tokens) == 0 {
+		return nil
+	}
+
+	type scored struct {
+		p     models.Product
+		score int
+	}
+	var results []scored
+
+	for _, p := range catalog.Products {
+		s := scoreProduct(p, tokens)
+		if s > 0 {
+			results = append(results, scored{p, s})
+		}
+	}
+
+	// Sort by score descending (simple insertion sort — catalog is small)
+	for i := 1; i < len(results); i++ {
+		for j := i; j > 0 && results[j].score > results[j-1].score; j-- {
+			results[j], results[j-1] = results[j-1], results[j]
+		}
+	}
+
+	out := make([]models.ProductResult, 0, limit)
+	for i, r := range results {
+		if i >= limit {
+			break
+		}
+		out = append(out, models.ProductResult{
+			ID:      r.p.ID,
+			Name:    r.p.Name,
+			Article: r.p.Article,
+			Price:   r.p.Price,
+			Image:   r.p.Image,
+			URL:     r.p.URL,
+		})
+	}
+	return out
 }
 
 // ChatHandler handles POST /api/chat
@@ -119,27 +176,31 @@ func ChatHandler(catalog *models.Catalog) http.HandlerFunc {
 			return
 		}
 
+		// Always search catalog for matching products
+		matchedProducts := searchProducts(catalog, req.Message, 4)
+
 		// Demo mode fallback
 		if apiKey == "" {
-			json.NewEncoder(w).Encode(models.ChatResponse{
+			resp := models.ChatResponse{
 				Reply: "Здравствуйте! 👋 Я AI-ассистент ГК Электрокомплект.\n\n" +
 					"(Демо-режим — настройте OPENAI_API_KEY для полноценного ИИ)\n\n" +
-					"Вы можете найти нужный товар на сайте ekt.kz или позвоните нам:\n" +
-					"📞 +7 (727) 346-88-88",
-			})
+					"Звоните: 📞 +7 (727) 346-88-88",
+				Products: matchedProducts,
+			}
+			json.NewEncoder(w).Encode(resp)
 			return
 		}
 
 		client := openai.NewClient(apiKey)
 		systemPrompt := buildSystemPrompt(catalog)
 
-		resp, err := client.CreateChatCompletion(r.Context(), openai.ChatCompletionRequest{
+		aiResp, err := client.CreateChatCompletion(r.Context(), openai.ChatCompletionRequest{
 			Model: "gpt-4o-mini",
 			Messages: []openai.ChatCompletionMessage{
 				{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
 				{Role: openai.ChatMessageRoleUser, Content: req.Message},
 			},
-			MaxTokens:   600,
+			MaxTokens:   500,
 			Temperature: 0.6,
 		})
 
@@ -150,7 +211,8 @@ func ChatHandler(catalog *models.Catalog) http.HandlerFunc {
 		}
 
 		json.NewEncoder(w).Encode(models.ChatResponse{
-			Reply: resp.Choices[0].Message.Content,
+			Reply:    aiResp.Choices[0].Message.Content,
+			Products: matchedProducts,
 		})
 	}
 }

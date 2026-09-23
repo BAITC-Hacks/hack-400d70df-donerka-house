@@ -66,6 +66,11 @@ async function sendText(text) {
     } else {
       const data = await res.json();
       appendMsg(data.reply || '...', 'bot');
+
+      // Render product cards if returned
+      if (data.products && data.products.length > 0) {
+        appendProductCards(data.products);
+      }
     }
   } catch {
     removeTyping(typingId);
@@ -78,6 +83,7 @@ async function sendText(text) {
   }
 }
 
+// Append a plain text message bubble
 function appendMsg(text, role) {
   const container = document.getElementById('chatMessages');
   const wrap = document.createElement('div');
@@ -93,6 +99,83 @@ function appendMsg(text, role) {
 
   wrap.appendChild(bubble);
   wrap.appendChild(time);
+  container.appendChild(wrap);
+  scrollBottom();
+}
+
+// Append product cards with image, name, price, link
+function appendProductCards(products) {
+  const container = document.getElementById('chatMessages');
+
+  const wrap = document.createElement('div');
+  wrap.className = 'msg bot';
+
+  const cardsWrap = document.createElement('div');
+  cardsWrap.className = 'product-cards-row';
+
+  products.forEach(p => {
+    const card = document.createElement('a');
+    card.className = 'chat-product-card';
+    card.href = p.url;
+    card.target = '_blank';
+    card.rel = 'noopener noreferrer';
+
+    const imgWrap = document.createElement('div');
+    imgWrap.className = 'chat-product-img-wrap';
+
+    if (p.image) {
+      const img = document.createElement('img');
+      img.src = p.image;
+      img.alt = p.name;
+      img.className = 'chat-product-img';
+      img.onerror = () => {
+        img.style.display = 'none';
+        placeholder.style.display = 'flex';
+      };
+      imgWrap.appendChild(img);
+    }
+
+    const placeholder = document.createElement('div');
+    placeholder.className = 'chat-product-placeholder';
+    placeholder.textContent = '⚡';
+    placeholder.style.display = p.image ? 'none' : 'flex';
+    imgWrap.appendChild(placeholder);
+
+    const info = document.createElement('div');
+    info.className = 'chat-product-info';
+
+    const article = document.createElement('div');
+    article.className = 'chat-product-article';
+    article.textContent = 'Арт: ' + (p.article || '—');
+
+    const name = document.createElement('div');
+    name.className = 'chat-product-name';
+    name.textContent = p.name;
+
+    const footer = document.createElement('div');
+    footer.className = 'chat-product-footer';
+
+    const price = document.createElement('span');
+    price.className = 'chat-product-price';
+    price.textContent = p.price ? p.price.toLocaleString('ru-KZ') + ' тг' : 'По запросу';
+
+    const link = document.createElement('span');
+    link.className = 'chat-product-link';
+    link.textContent = 'Подробнее →';
+
+    footer.appendChild(price);
+    footer.appendChild(link);
+
+    info.appendChild(article);
+    info.appendChild(name);
+    info.appendChild(footer);
+
+    card.appendChild(imgWrap);
+    card.appendChild(info);
+    cardsWrap.appendChild(card);
+  });
+
+  wrap.appendChild(cardsWrap);
   container.appendChild(wrap);
   scrollBottom();
 }
@@ -116,7 +199,7 @@ function removeTyping(id) {
 
 function scrollBottom() {
   const c = document.getElementById('chatMessages');
-  setTimeout(() => { c.scrollTop = c.scrollHeight; }, 50);
+  setTimeout(() => { c.scrollTop = c.scrollHeight; }, 60);
 }
 
 function now() {

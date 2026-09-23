@@ -51,9 +51,20 @@ type ChatRequest struct {
 	Message string `json:"message"`
 }
 
-// ChatResponse is the AI reply
+// ProductResult is a matched product returned alongside the AI reply
+type ProductResult struct {
+	ID      int     `json:"id"`
+	Name    string  `json:"name"`
+	Article string  `json:"article"`
+	Price   float64 `json:"price"`
+	Image   string  `json:"image"`
+	URL     string  `json:"url"`
+}
+
+// ChatResponse is the AI reply + optional matched products
 type ChatResponse struct {
-	Reply string `json:"reply"`
+	Reply    string          `json:"reply"`
+	Products []ProductResult `json:"products,omitempty"`
 }
 
 // ErrorResponse is a standard error

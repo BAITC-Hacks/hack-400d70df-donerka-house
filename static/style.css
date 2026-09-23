@@ -224,6 +224,108 @@ button { font-family: inherit; cursor: pointer; }
 .chat-messages::-webkit-scrollbar { width: 4px; }
 .chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
+/* ===== CHAT PRODUCT CARDS ===== */
+.product-cards-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 310px;
+}
+
+.chat-product-card {
+  display: flex;
+  gap: 10px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  text-decoration: none;
+  color: var(--text);
+  transition: all .2s;
+  cursor: pointer;
+}
+.chat-product-card:hover {
+  border-color: var(--primary);
+  box-shadow: 0 4px 16px rgba(230,57,70,.15);
+  transform: translateY(-1px);
+}
+
+.chat-product-img-wrap {
+  width: 76px;
+  min-width: 76px;
+  height: 76px;
+  background: var(--gray-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.chat-product-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 4px;
+}
+.chat-product-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  opacity: 0.35;
+}
+
+.chat-product-info {
+  flex: 1;
+  padding: 8px 8px 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.chat-product-article {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  font-family: monospace;
+}
+.chat-product-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.chat-product-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: auto;
+  gap: 6px;
+}
+.chat-product-price {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--primary);
+  white-space: nowrap;
+}
+.chat-product-link {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--blue);
+  white-space: nowrap;
+}
+.chat-product-card:hover .chat-product-link {
+  color: var(--primary);
+}
+
+
+
 /* ===== RESPONSIVE ===== */
 @media (max-width: 900px) {
   .header-inner { flex-wrap: wrap; }
