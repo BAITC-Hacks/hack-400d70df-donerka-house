@@ -212,14 +212,14 @@ func searchProducts(catalog *models.Catalog, query string, limit int) []models.P
 }
 
 func findProductByReference(catalog *models.Catalog, reference string) *models.Product {
-	reference = strings.ToLower(strings.TrimSpace(reference))
-	if reference == "" {
+	reference = strings.TrimSpace(reference)
+	if normalizeReference(reference) == "" {
 		return nil
 	}
 	products := catalog.ProductsSnapshot()
 	for i := range products {
 		product := &products[i]
-		if strings.ToLower(product.Article) == reference || strconv.Itoa(product.ID) == reference {
+		if referencesEqual(product.Article, reference) || strconv.Itoa(product.ID) == reference {
 			return product
 		}
 	}
@@ -231,6 +231,21 @@ func findProductByReference(catalog *models.Catalog, reference string) *models.P
 		}
 	}
 	return nil
+}
+
+// normalizeReference handles the supplier format used by EKT, where many
+// catalog articles contain a trailing underscore (for example 010400273_)
+// while customers usually type the visible number without it.
+func normalizeReference(reference string) string {
+	value := strings.ToLower(strings.TrimSpace(reference))
+	value = strings.Trim(value, "\"'`.,;:()[]{}")
+	return strings.TrimRight(value, "_")
+}
+
+func referencesEqual(left, right string) bool {
+	left = normalizeReference(left)
+	right = normalizeReference(right)
+	return left != "" && left == right
 }
 
 func hasAddIntent(message string) bool {
@@ -436,7 +451,7 @@ func productsForResults(catalog *models.Catalog, results []models.ProductResult)
 	result := make([]models.Product, 0, len(results))
 	for _, match := range results {
 		for _, product := range products {
-			if strings.EqualFold(product.Article, match.Article) {
+			if referencesEqual(product.Article, match.Article) {
 				result = append(result, product)
 				break
 			}

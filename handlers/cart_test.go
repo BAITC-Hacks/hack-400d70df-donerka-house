@@ -125,3 +125,24 @@ func TestChatAddsExplicitPurchaseBeforeOpenAI(t *testing.T) {
 		t.Fatalf("expected immediate cart update, got %+v", chat.Cart)
 	}
 }
+
+func TestEKTArticleWithoutTrailingUnderscoreResolvesToProduct(t *testing.T) {
+	catalog := &models.Catalog{Products: []models.Product{{
+		ID:      18238,
+		Name:    "D34620 EZ9 АВДТ 20А (30мА) SchnEl",
+		Article: "010400273_",
+		Price:   14630,
+	}}}
+	product := findProductByReference(catalog, "010400273")
+	if product == nil || product.Article != "010400273_" {
+		t.Fatalf("expected EKT article with suffix to resolve, got %+v", product)
+	}
+
+	action, cart, reply := addToCartFromMessage(catalog, NewCartStore(), "session", "Добавь 2 шт. автомат 010400273")
+	if action == nil || action.Article != "010400273_" || action.Quantity != 2 {
+		t.Fatalf("expected direct add to resolve normalized article, got action=%+v reply=%q", action, reply)
+	}
+	if cart == nil || cart.Count != 2 {
+		t.Fatalf("expected normalized article in cart, got %+v", cart)
+	}
+}
