@@ -34,8 +34,9 @@ func TestEKTAPILoadsPagesAndDetailsWithBasicAuth(t *testing.T) {
 		if r.URL.Path == "/api/products/detail" && r.URL.Query().Get("id") == "1" {
 			_ = json.NewEncoder(w).Encode(models.ProductDetail{
 				ID: 1, Name: "Первый", Article: "A1", Price: 110, Quantity: 7,
-				Stores:     []models.Store{{ID: 3, Name: "Алматы", Quantity: 7}},
-				Properties: map[string]interface{}{"Бренд": "EKT"},
+				Stores:       []models.Store{{ID: 3, Name: "Алматы", Quantity: 7}},
+				Properties:   map[string]interface{}{"Бренд": "EKT"},
+				Certificates: []string{"https://ekt.kz/certs/a1.pdf"},
 			})
 			return
 		}
@@ -55,5 +56,8 @@ func TestEKTAPILoadsPagesAndDetailsWithBasicAuth(t *testing.T) {
 	enriched := api.Enrich(context.Background(), products[:1])
 	if enriched[0].TotalStockQuantity != 7 || enriched[0].Availability != "В наличии" || enriched[0].Stores[0].Name != "Алматы" || enriched[0].Properties["Бренд"] != "EKT" {
 		t.Fatalf("unexpected enriched product: %+v", enriched[0])
+	}
+	if len(enriched[0].Certificates) != 1 || enriched[0].Certificates[0] != "https://ekt.kz/certs/a1.pdf" {
+		t.Fatalf("expected certificate from EKT API detail, got %+v", enriched[0].Certificates)
 	}
 }
