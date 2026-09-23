@@ -503,7 +503,10 @@ func purchaseTermsReply() string {
 }
 
 func productUnavailable(product models.Product) bool {
-	return strings.EqualFold(product.Availability, "Под заказ")
+	status := strings.ToLower(strings.TrimSpace(product.Availability))
+	return status == "под заказ" ||
+		status == "нет в наличии" ||
+		(status != "" && product.StockQuantity == 0 && product.TotalStockQuantity == 0 && status != "в наличии")
 }
 
 func analogSimilarity(target, candidate models.Product) int {
