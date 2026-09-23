@@ -340,6 +340,13 @@ button { font-family: inherit; cursor: pointer; }
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.chat-product-stock {
+  font-size: 0.68rem;
+  line-height: 1.25;
+  font-weight: 700;
+}
+.chat-product-stock.is-available { color: #18864b; }
+.chat-product-stock.is-preorder { color: #a16207; }
 .chat-product-footer {
   display: flex;
   justify-content: space-between;

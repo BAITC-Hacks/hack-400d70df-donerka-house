@@ -56,7 +56,9 @@ const systemPromptBase = `Ты — умный AI-ассистент интерн
 - Для add_to_cart передавай настоящий артикул из каталога и положительное количество.
 - Используй add_to_cart после явного выбора клиента. Фразы «беру этот», «выбираю первый», «добавь» и аналогичные уже являются согласием — НЕ спрашивай повторное подтверждение.
 - Если клиент спрашивает «для чего это», «где применяется», «чем отличается» или задаёт технический вопрос, объясни назначение, применение, ограничения и ключевые характеристики выбранного товара по данным из актуального контекста сайта.
-- Не утверждай наличие на складе, если оно не указано в данных. Не выдумывай характеристики.
+- Говори о наличии только по полям «Наличие», «Количество в регионе» и «Регион» из актуальных данных EKT. Не выдумывай остатки.
+- Если указано «В наличии», сообщай, что товар доступен в регионе страницы EKT; если указано количество — называй его как доступный региональный лимит. Если «Под заказ», прямо сообщай это.
+- Если данных о наличии нет, честно скажи, что публичная страница не показала статус, и дай ссылку на товар. Не говори, что проверить наличие невозможно, когда статус есть в контексте.
 - Все цены в тенге (тг / KZT)
 - Если клиент спрашивает конкретный товар — он будет показан отдельно карточками с фото, просто дай краткое текстовое описание
 - Отвечай на русском (или на языке клиента)
@@ -69,6 +71,8 @@ var addIntentPattern = regexp.MustCompile(`(?i)(добав(?:ь|ить|ьте)|�
 var quantityAfterLabelPattern = regexp.MustCompile(`(?i)(?:x|×|колич(?:ество|\-во)?|шт\.?|штук(?:и)?)\s*[:=]?\s*(\d+)`)
 var quantityBeforeUnitPattern = regexp.MustCompile(`(?i)\b(\d+)\s*(?:шт\.?|штук(?:и)?|pcs)`)
 var productChoicePattern = regexp.MustCompile(`(?i)(перв|втор|трет|четверт|номер\s*\d+|№\s*\d+|first|second|third|fourth)`)
+var availabilityQuestionPattern = regexp.MustCompile(`(?i)(налич|склад|остат|есть\s+ли|доступн|под\s+заказ|в\s+налич|stock|availab|inventory)`)
+var catalogReferenceTokenPattern = regexp.MustCompile(`\d`)
 
 // buildSystemPrompt creates the AI prompt with embedded product data.
 func buildSystemPrompt(catalog *models.Catalog, relevant ...[]models.Product) string {
@@ -90,6 +94,16 @@ func buildSystemPrompt(catalog *models.Catalog, relevant ...[]models.Product) st
 		prompt += "\n## Актуальные товары и сведения с публичного сайта nursultan.ekt.kz:\n"
 		for index, product := range relevant[0] {
 			prompt += fmt.Sprintf("%d. [Арт: %s] %s — %.0f тг\n", index+1, product.Article, product.Name, product.Price)
+			if product.Availability != "" {
+				prompt += "   Наличие: " + product.Availability
+				if product.StockQuantity > 0 {
+					prompt += fmt.Sprintf("; количество в регионе: %d шт.", product.StockQuantity)
+				}
+				if product.StockLocation != "" {
+					prompt += "; регион: " + product.StockLocation
+				}
+				prompt += "\n"
+			}
 			if product.Description != "" {
 				prompt += "   Описание и назначение: " + product.Description + "\n"
 			}
@@ -170,15 +184,18 @@ func searchProducts(catalog *models.Catalog, query string, limit int) []models.P
 			break
 		}
 		out = append(out, models.ProductResult{
-			ID:          result.p.ID,
-			Name:        result.p.Name,
-			Article:     result.p.Article,
-			Price:       result.p.Price,
-			Image:       result.p.Image,
-			URL:         result.p.URL,
-			Description: result.p.Description,
-			Properties:  result.p.Properties,
-			Source:      result.p.Source,
+			ID:            result.p.ID,
+			Name:          result.p.Name,
+			Article:       result.p.Article,
+			Price:         result.p.Price,
+			Image:         result.p.Image,
+			URL:           result.p.URL,
+			Description:   result.p.Description,
+			Properties:    result.p.Properties,
+			Source:        result.p.Source,
+			Availability:  result.p.Availability,
+			StockQuantity: result.p.StockQuantity,
+			StockLocation: result.p.StockLocation,
 		})
 	}
 	return out
@@ -413,15 +430,18 @@ func productResultsFromProducts(products []models.Product) []models.ProductResul
 	results := make([]models.ProductResult, 0, len(products))
 	for _, product := range products {
 		results = append(results, models.ProductResult{
-			ID:          product.ID,
-			Name:        product.Name,
-			Article:     product.Article,
-			Price:       product.Price,
-			Image:       product.Image,
-			URL:         product.URL,
-			Description: product.Description,
-			Properties:  product.Properties,
-			Source:      product.Source,
+			ID:            product.ID,
+			Name:          product.Name,
+			Article:       product.Article,
+			Price:         product.Price,
+			Image:         product.Image,
+			URL:           product.URL,
+			Description:   product.Description,
+			Properties:    product.Properties,
+			Source:        product.Source,
+			Availability:  product.Availability,
+			StockQuantity: product.StockQuantity,
+			StockLocation: product.StockLocation,
 		})
 	}
 	return results
@@ -457,13 +477,18 @@ func ChatHandler(catalog *models.Catalog, store *CartStore, live *LiveCatalog, c
 		liveProducts := make([]models.Product, 0)
 		if live != nil {
 			liveContext, cancel := context.WithTimeout(r.Context(), 7*time.Second)
-			liveProducts, _ = live.Search(liveContext, req.Message)
+			liveProducts, _ = live.Search(liveContext, liveSearchQuery(req.Message))
 			liveProducts = live.Enrich(liveContext, liveProducts)
 			cancel()
 			catalog.AddProducts(liveProducts)
 		}
 		contextProducts := uniqueProducts(liveProducts, recentProducts)
 		matchedProducts := searchProducts(catalog, req.Message, 4)
+		if len(liveProducts) > 0 {
+			// Prefer the fresh regional HTML results over an older local copy of
+			// the same article so stock fields reach both the UI and the model.
+			matchedProducts = productResultsFromProducts(liveProducts)
+		}
 		if len(matchedProducts) == 0 && len(recentProducts) > 0 {
 			matchedProducts = productResultsFromProducts(recentProducts)
 		}
@@ -479,6 +504,7 @@ func ChatHandler(catalog *models.Catalog, store *CartStore, live *LiveCatalog, c
 					"(Демо-режим — настройте OPENAI_API_KEY для полноценного ИИ)\n\n" +
 					"Звоните: 📞 +7 (727) 346-88-88"
 			}
+			reply = appendAvailabilityFacts(reply, req.Message, contextProducts)
 			conversations.append(sessionID, req.Message, reply, contextProducts)
 			writeJSON(w, models.ChatResponse{Reply: reply, Products: matchedProducts, CartAction: action, Cart: cart})
 			return
@@ -501,6 +527,7 @@ func ChatHandler(catalog *models.Catalog, store *CartStore, live *LiveCatalog, c
 
 		assistantMessage := first.Choices[0].Message
 		if len(assistantMessage.ToolCalls) == 0 {
+			assistantMessage.Content = appendAvailabilityFacts(assistantMessage.Content, req.Message, contextProducts)
 			conversations.append(sessionID, req.Message, assistantMessage.Content, contextProducts)
 			writeJSON(w, models.ChatResponse{Reply: assistantMessage.Content, Products: matchedProducts})
 			return
@@ -534,7 +561,52 @@ func ChatHandler(catalog *models.Catalog, store *CartStore, live *LiveCatalog, c
 		if reply == "" {
 			reply = "Не удалось обработать запрос. Уточните артикул товара."
 		}
+		reply = appendAvailabilityFacts(reply, req.Message, contextProducts)
 		conversations.append(sessionID, req.Message, reply, contextProducts)
 		writeJSON(w, models.ChatResponse{Reply: reply, Products: matchedProducts, CartAction: action, Cart: cart})
 	}
+}
+
+func liveSearchQuery(message string) string {
+	for _, token := range tokenize(message) {
+		if len(token) >= 4 && catalogReferenceTokenPattern.MatchString(token) {
+			return token
+		}
+	}
+	return message
+}
+
+func appendAvailabilityFacts(reply, message string, products []models.Product) string {
+	if !availabilityQuestionPattern.MatchString(message) || len(products) == 0 {
+		return reply
+	}
+
+	lines := make([]string, 0, 1)
+	missingFact := false
+	lowerReply := strings.ToLower(reply)
+	for _, product := range products {
+		if product.Availability == "" {
+			continue
+		}
+		line := fmt.Sprintf("«%s»: %s", product.Name, product.Availability)
+		if product.StockQuantity > 0 {
+			line += fmt.Sprintf(", до %d шт.", product.StockQuantity)
+		}
+		if product.StockLocation != "" {
+			line += " (" + product.StockLocation + ")"
+		}
+		lines = append(lines, line)
+		if !strings.Contains(lowerReply, strings.ToLower(product.Availability)) ||
+			(product.StockQuantity > 0 && !strings.Contains(lowerReply, strconv.Itoa(product.StockQuantity))) ||
+			(product.StockLocation != "" && !strings.Contains(lowerReply, strings.ToLower(product.StockLocation))) {
+			missingFact = true
+		}
+		// The cards contain the full result set. Keep the guaranteed textual
+		// fallback focused on the first, most relevant live match.
+		break
+	}
+	if !missingFact || len(lines) == 0 {
+		return reply
+	}
+	return strings.TrimSpace(reply) + "\n\nНаличие по данным региональной страницы EKT: " + strings.Join(lines, "; ") + "."
 }

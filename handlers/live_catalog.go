@@ -71,6 +71,7 @@ func (l *LiveCatalog) Search(ctx context.Context, query string) ([]models.Produc
 	if err != nil {
 		return nil, err
 	}
+	stockLocation := parseLiveCurrentCity(root)
 
 	products := make([]models.Product, 0, 8)
 	walk(root, func(node *htmlnode.Node) {
@@ -79,6 +80,7 @@ func (l *LiveCatalog) Search(ctx context.Context, query string) ([]models.Produc
 		}
 		product := parseLiveCard(l.baseURL, node)
 		if product.Name != "" && product.URL != "" {
+			product.StockLocation = stockLocation
 			products = append(products, product)
 		}
 	})
@@ -100,6 +102,9 @@ func (l *LiveCatalog) Enrich(ctx context.Context, products []models.Product) []m
 			continue
 		}
 		parseLiveDetail(&products[i], root)
+		if products[i].StockLocation == "" {
+			products[i].StockLocation = parseLiveCurrentCity(root)
+		}
 	}
 	return products
 }
@@ -139,6 +144,7 @@ func parseLiveCard(baseURL string, card *htmlnode.Node) models.Product {
 	}); article != nil {
 		product.Article = parseLiveArticle(textContent(article))
 	}
+	product.Availability, product.StockQuantity = parseLiveAvailability(card)
 	return product
 }
 
@@ -165,6 +171,20 @@ func parseLiveDetail(product *models.Product, root *htmlnode.Node) {
 	}); meta != nil {
 		product.Image = absoluteURL(product.Source, attr(meta, "content"))
 	}
+	if buttons := findDescendant(root, func(node *htmlnode.Node) bool {
+		return node.Type == htmlnode.ElementNode && hasClass(node, "detail_info__buttons")
+	}); buttons != nil {
+		availability, quantity := parseLiveAvailability(buttons)
+		if availability != "" {
+			product.Availability = availability
+		}
+		if quantity > 0 || availability == "Под заказ" {
+			product.StockQuantity = quantity
+		}
+	}
+	if product.StockLocation == "" {
+		product.StockLocation = parseLiveCurrentCity(root)
+	}
 
 	if product.Properties == nil {
 		product.Properties = make(map[string]string)
@@ -189,6 +209,64 @@ func parseLiveDetail(product *models.Product, root *htmlnode.Node) {
 			product.Article = article
 		}
 	}
+}
+
+// parseLiveAvailability reads the availability controls rendered by EKT's
+// public catalog. The page uses add2basket for regional stock and
+// add2basketPreOrder for products that are not currently in that region.
+func parseLiveAvailability(root *htmlnode.Node) (string, int) {
+	if root == nil {
+		return "", 0
+	}
+	action := ""
+	walk(root, func(node *htmlnode.Node) {
+		if action != "" || node.Type != htmlnode.ElementNode {
+			return
+		}
+		candidate := attr(node, "data-action")
+		if candidate == "add2basket" || candidate == "add2basketPreOrder" {
+			action = candidate
+		}
+	})
+
+	quantity := 0
+	if input := findDescendant(root, func(node *htmlnode.Node) bool {
+		return node.Type == htmlnode.ElementNode && node.Data == "input" && hasClass(node, "tq_quantity")
+	}); input != nil {
+		quantity, _ = strconv.Atoi(attr(input, "max"))
+		if quantity < 0 {
+			quantity = 0
+		}
+	}
+
+	switch action {
+	case "add2basket":
+		return "В наличии", quantity
+	case "add2basketPreOrder":
+		return "Под заказ", 0
+	}
+
+	text := strings.ToLower(cleanText(textContent(root)))
+	switch {
+	case strings.Contains(text, "под заказ"):
+		return "Под заказ", 0
+	case strings.Contains(text, "в наличии"):
+		return "В наличии", quantity
+	}
+	return "", quantity
+}
+
+func parseLiveCurrentCity(root *htmlnode.Node) string {
+	city := findDescendant(root, func(node *htmlnode.Node) bool {
+		return node.Type == htmlnode.ElementNode && hasClass(node, "select-city__block__text-city")
+	})
+	if city != nil {
+		return cleanText(textContent(city))
+	}
+	city = findDescendant(root, func(node *htmlnode.Node) bool {
+		return node.Type == htmlnode.ElementNode && node.Data == "span" && attr(node, "id") == "select-city__js"
+	})
+	return cleanText(textContent(city))
 }
 
 func parseLiveArticle(value string) string {

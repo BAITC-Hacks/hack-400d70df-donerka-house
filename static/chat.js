@@ -295,6 +295,18 @@ function appendProductCards(products) {
     const name = document.createElement('div');
     name.className = 'chat-product-name';
     name.textContent = product.name || 'Товар';
+    if (product.availability) {
+      const stock = document.createElement('div');
+      stock.className = 'chat-product-stock ' + (product.availability === 'В наличии' ? 'is-available' : 'is-preorder');
+      stock.textContent = product.availability;
+      if (product.stock_quantity > 0) {
+        stock.textContent += ` · до ${product.stock_quantity} шт.`;
+      }
+      if (product.stock_location) {
+        stock.textContent += ` · ${product.stock_location}`;
+      }
+      info.appendChild(stock);
+    }
     const footer = document.createElement('div');
     footer.className = 'chat-product-footer';
     const price = document.createElement('span');
