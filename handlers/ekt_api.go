@@ -88,6 +88,17 @@ func (a *EKTAPI) loadProductsPage(ctx context.Context, page int) (models.Product
 // an empty or short page. Some EKT responses use count as page size, so the
 // client does not rely on count alone to decide when pagination is complete.
 func (a *EKTAPI) LoadProducts(ctx context.Context) ([]models.Product, error) {
+	return a.loadProducts(ctx, nil)
+}
+
+// LoadProductsIncremental is the same paginated API read, but invokes onPage
+// after every page so a running server can expose newly loaded products before
+// the entire catalog has finished synchronizing.
+func (a *EKTAPI) LoadProductsIncremental(ctx context.Context, onPage func([]models.Product)) ([]models.Product, error) {
+	return a.loadProducts(ctx, onPage)
+}
+
+func (a *EKTAPI) loadProducts(ctx context.Context, onPage func([]models.Product)) ([]models.Product, error) {
 	if !a.Enabled() {
 		return nil, errors.New("EKT API credentials are not configured")
 	}
@@ -101,6 +112,7 @@ func (a *EKTAPI) LoadProducts(ctx context.Context) ([]models.Product, error) {
 		if len(result.Items) == 0 {
 			break
 		}
+		pageProducts := make([]models.Product, 0, len(result.Items))
 		for _, product := range result.Items {
 			if product.ID == 0 {
 				continue
@@ -110,6 +122,10 @@ func (a *EKTAPI) LoadProducts(ctx context.Context) ([]models.Product, error) {
 			}
 			seen[product.ID] = struct{}{}
 			products = append(products, product)
+			pageProducts = append(pageProducts, product)
+		}
+		if onPage != nil && len(pageProducts) > 0 {
+			onPage(pageProducts)
 		}
 		if result.PerPage > 0 && len(result.Items) < result.PerPage {
 			break

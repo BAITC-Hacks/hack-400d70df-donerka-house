@@ -55,12 +55,13 @@ func loadCatalog(api *handlers.EKTAPI) (*models.Catalog, error) {
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 			defer cancel()
-			products, err := api.LoadProducts(ctx)
+			products, err := api.LoadProductsIncremental(ctx, func(page []models.Product) {
+				catalog.AddProducts(page)
+			})
 			if err != nil {
 				log.Printf("⚠️ Authenticated EKT catalog sync failed: %v", err)
 				return
 			}
-			catalog.AddProducts(products)
 			log.Printf("✅ Authenticated EKT catalog sync complete: %d products", len(products))
 		}()
 	}
