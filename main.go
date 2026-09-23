@@ -5,10 +5,85 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
+	"sync"
+	"time"
 
 	"github.com/BAITC-Hacks/hack-400d70df-donerka-house/handlers"
 	"github.com/BAITC-Hacks/hack-400d70df-donerka-house/models"
 )
+
+func loadRemoteDetails(catalog *models.Catalog) {
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("LOAD_REMOTE_DETAILS")), "false") {
+		log.Println("Remote detail loading disabled by LOAD_REMOTE_DETAILS=false")
+		return
+	}
+
+	type result struct {
+		detail models.ProductDetail
+		err    error
+	}
+	client := &http.Client{Timeout: 5 * time.Second}
+	jobs := make(chan models.Product)
+	results := make(chan result)
+	var workers sync.WaitGroup
+
+	worker := func() {
+		defer workers.Done()
+		for product := range jobs {
+			if product.URLAPIDetail == "" {
+				continue
+			}
+			request, err := http.NewRequest(http.MethodGet, product.URLAPIDetail, nil)
+			if err != nil {
+				results <- result{err: err}
+				continue
+			}
+			request.Header.Set("User-Agent", "ekt-ai-assistant/1.0")
+			response, err := client.Do(request)
+			if err != nil {
+				results <- result{err: err}
+				continue
+			}
+			var detail models.ProductDetail
+			err = json.NewDecoder(response.Body).Decode(&detail)
+			_ = response.Body.Close()
+			if err == nil && detail.ID == 0 {
+				err = os.ErrInvalid
+			}
+			results <- result{detail: detail, err: err}
+		}
+	}
+
+	workerCount := 6
+	if len(catalog.Products) < workerCount {
+		workerCount = len(catalog.Products)
+	}
+	for i := 0; i < workerCount; i++ {
+		workers.Add(1)
+		go worker()
+	}
+	go func() {
+		for _, product := range catalog.Products {
+			if _, loaded := catalog.Details[product.ID]; !loaded {
+				jobs <- product
+			}
+		}
+		close(jobs)
+		workers.Wait()
+		close(results)
+	}()
+
+	loaded := 0
+	for item := range results {
+		if item.err != nil {
+			continue
+		}
+		catalog.Details[item.detail.ID] = item.detail
+		loaded++
+	}
+	log.Printf("Loaded %d additional product details from url_api_detail", loaded)
+}
 
 func loadCatalog() (*models.Catalog, error) {
 	catalog := &models.Catalog{
@@ -51,12 +126,23 @@ func loadCatalog() (*models.Catalog, error) {
 		log.Printf("No local product detail file: %v", err)
 	}
 
+	loadRemoteDetails(catalog)
+
 	if data, err := os.ReadFile("data/certificates.json"); err == nil {
 		if err := json.Unmarshal(data, &catalog.Certificates); err != nil {
 			log.Printf("Error parsing data/certificates.json: %v", err)
 		}
 	} else {
 		log.Printf("No certificate metadata file: %v", err)
+	}
+	for _, product := range catalog.Products {
+		if len(catalog.Certificates[product.ID]) == 0 {
+			catalog.Certificates[product.ID] = []models.Certificate{{
+				Name:   "Сертификат: подтвердить у поставщика (демо-ссылка)",
+				URL:    product.URL,
+				IsDemo: true,
+			}}
+		}
 	}
 
 	if data, err := os.ReadFile("data/purchase_terms.json"); err == nil {
@@ -115,9 +201,9 @@ func main() {
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"status":  "ok",
+			"status":   "ok",
 			"products": len(catalog.Products),
-			"details": len(catalog.Details),
+			"details":  len(catalog.Details),
 		})
 	})
 
