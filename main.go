@@ -17,7 +17,9 @@ func loadCatalog(api *handlers.EKTAPI) (*models.Catalog, error) {
 	catalog := &models.Catalog{}
 	// Start immediately from the local snapshot. The authenticated EKT catalog
 	// is synchronized in the background below so a large paginated catalog
-	// cannot block the web server from starting.
+	// cannot block the web server from starting. The remote snapshot is merged
+	// only after every page has been loaded, so the public count does not grow
+	// while synchronization is in progress.
 	files := []string{"data/products.json", "data/products2.json"}
 	seen := map[int]bool{}
 
@@ -55,13 +57,12 @@ func loadCatalog(api *handlers.EKTAPI) (*models.Catalog, error) {
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 			defer cancel()
-			products, err := api.LoadProductsIncremental(ctx, func(page []models.Product) {
-				catalog.AddProducts(page)
-			})
+			products, err := api.LoadProducts(ctx)
 			if err != nil {
 				log.Printf("⚠️ Authenticated EKT catalog sync failed: %v", err)
 				return
 			}
+			catalog.AddProducts(products)
 			log.Printf("✅ Authenticated EKT catalog sync complete: %d products", len(products))
 		}()
 	}

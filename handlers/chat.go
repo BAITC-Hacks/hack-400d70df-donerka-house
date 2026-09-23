@@ -803,7 +803,8 @@ func ChatHandlerWithAuth(catalog *models.Catalog, store *CartStore, live *LiveCa
 				liveProducts = ektAPI.Enrich(apiContext, liveProducts)
 				apiCancel()
 			}
-			catalog.AddProducts(liveProducts)
+			// Live search is request-scoped. Do not merge it into the published
+			// catalog, otherwise every new chat lookup can change the catalog count.
 		}
 
 		contextProducts := uniqueProducts(liveProducts, recentProducts)
@@ -821,7 +822,6 @@ func ChatHandlerWithAuth(catalog *models.Catalog, store *CartStore, live *LiveCa
 			apiContext, apiCancel := context.WithTimeout(r.Context(), 6*time.Second)
 			contextProducts = ektAPI.Enrich(apiContext, contextProducts)
 			apiCancel()
-			catalog.AddProducts(contextProducts)
 			matchedProducts = productResultsFromProducts(contextProducts)
 		}
 
