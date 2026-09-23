@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Donerka House 🌯</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="container">
+      <div class="logo">🌯 Donerka House</div>
+      <nav class="nav">
+        <a href="#menu">Меню</a>
+        <a href="#about">О нас</a>
+        <a href="#contacts">Контакты</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- HERO SECTION -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-content">
+        <h1>Лучшие донеры<br /><span class="accent">в городе</span></h1>
+        <p class="hero-sub">Свежие ингредиенты, секретные соусы и быстрое обслуживание каждый день с 10:00 до 23:00</p>
+        <div class="hero-btns">
+          <a href="#menu" class="btn btn-primary">Смотреть меню</a>
+          <button class="btn btn-outline" onclick="openChat()">🤖 Спросить ИИ</button>
+        </div>
+      </div>
+      <div class="hero-img">🌯</div>
+    </div>
+  </section>
+
+  <!-- MENU SECTION -->
+  <section class="section" id="menu">
+    <div class="container">
+      <h2 class="section-title">Наше меню</h2>
+      <div class="category-tabs" id="categoryTabs"></div>
+      <div class="menu-grid" id="menuGrid">
+        <div class="loading">Загружаем меню...</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ABOUT SECTION -->
+  <section class="section section-dark" id="about">
+    <div class="container">
+      <h2 class="section-title">О нас</h2>
+      <div class="features">
+        <div class="feature">
+          <div class="feature-icon">🥩</div>
+          <h3>Свежее мясо</h3>
+          <p>Только свежее мясо высшего качества каждый день</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🌿</div>
+          <h3>Свежие овощи</h3>
+          <p>Овощи и зелень поставляются ежедневно с фермерских рынков</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🔥</div>
+          <h3>Секретный соус</h3>
+          <p>Наш фирменный соус по особому рецепту — изюминка каждого донера</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">⚡</div>
+          <h3>Быстро</h3>
+          <p>Ваш заказ будет готов за 5 минут</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CONTACTS SECTION -->
+  <section class="section" id="contacts">
+    <div class="container">
+      <h2 class="section-title">Контакты</h2>
+      <div class="contacts-grid">
+        <div class="contact-card">
+          <div class="contact-icon">📍</div>
+          <h3>Адрес</h3>
+          <p id="restaurantAddress">Загружаем...</p>
+        </div>
+        <div class="contact-card">
+          <div class="contact-icon">📞</div>
+          <h3>Телефон</h3>
+          <p id="restaurantPhone">Загружаем...</p>
+        </div>
+        <div class="contact-card">
+          <div class="contact-icon">🕐</div>
+          <h3>Режим работы</h3>
+          <p id="restaurantHours">Загружаем...</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="container">
+      <p>🌯 Donerka House — Все права защищены</p>
+    </div>
+  </footer>
+
+  <!-- CHAT WIDGET -->
+  <div class="chat-bubble" id="chatBubble" onclick="toggleChat()" title="Спросить ИИ-ассистента">
+    <span class="chat-bubble-icon" id="chatBubbleIcon">🤖</span>
+    <span class="chat-bubble-badge" id="chatBubbleBadge" style="display:none">1</span>
+  </div>
+
+  <div class="chat-widget" id="chatWidget">
+    <div class="chat-header">
+      <div class="chat-header-info">
+        <div class="chat-avatar">🤖</div>
+        <div>
+          <div class="chat-title">Donerka AI</div>
+          <div class="chat-status">Онлайн • Готов помочь</div>
+        </div>
+      </div>
+      <button class="chat-close" onclick="toggleChat()">✕</button>
+    </div>
+
+    <div class="chat-messages" id="chatMessages">
+      <div class="message bot-message">
+        <div class="message-bubble">
+          Привет! 👋 Я AI-ассистент Donerka House.<br/>
+          Могу рассказать о меню, ценах и составе блюд.<br/>
+          Что вас интересует? 🌯
+        </div>
+        <div class="message-time">только что</div>
+      </div>
+    </div>
+
+    <div class="chat-suggestions" id="chatSuggestions">
+      <button class="suggestion-btn" onclick="sendSuggestion(this)">Что есть в меню?</button>
+      <button class="suggestion-btn" onclick="sendSuggestion(this)">Есть ли острые блюда?</button>
+      <button class="suggestion-btn" onclick="sendSuggestion(this)">Какие комбо есть?</button>
+      <button class="suggestion-btn" onclick="sendSuggestion(this)">Режим работы?</button>
+    </div>
+
+    <div class="chat-input-area">
+      <input
+        type="text"
+        id="chatInput"
+        class="chat-input"
+        placeholder="Напишите вопрос..."
+        onkeypress="handleKeyPress(event)"
+        maxlength="500"
+      />
+      <button class="chat-send" id="chatSendBtn" onclick="sendMessage()">
+        ➤
+      </button>
+    </div>
+  </div>
+
+  <script src="chat.js"></script>
+  <script>
+    // Load menu from API
+    async function loadMenu() {
+      try {
+        const res = await fetch('/api/menu');
+        const data = await res.json();
+
+        // Update contact info
+        document.getElementById('restaurantAddress').textContent = data.restaurant.address;
+        document.getElementById('restaurantPhone').textContent = data.restaurant.phone;
+        document.getElementById('restaurantHours').textContent = data.restaurant.working_hours;
+
+        // Render menu
+        renderMenu(data.categories);
+      } catch (e) {
+        document.getElementById('menuGrid').innerHTML = '<p class="error">Не удалось загрузить меню. Попробуйте позже.</p>';
+      }
+    }
+
+    function renderMenu(categories) {
+      const tabsEl = document.getElementById('categoryTabs');
+      const gridEl = document.getElementById('menuGrid');
+
+      // Render tabs
+      tabsEl.innerHTML = categories.map((cat, i) =>
+        `<button class="tab-btn ${i === 0 ? 'active' : ''}" onclick="filterCategory('${cat.id}', this)">${cat.name}</button>`
+      ).join('');
+
+      // Render all items
+      gridEl.innerHTML = categories.map(cat =>
+        cat.items.map(item => `
+          <div class="menu-card" data-category="${cat.id}">
+            <div class="menu-card-emoji">${getCategoryEmoji(cat.id)}</div>
+            <div class="menu-card-body">
+              <div class="menu-card-name">${item.name} ${item.spicy ? '🌶️' : ''}</div>
+              <div class="menu-card-desc">${item.description}</div>
+              <div class="menu-card-footer">
+                <span class="menu-card-weight">${item.weight}</span>
+                <span class="menu-card-price">${item.price} тг</span>
+              </div>
+            </div>
+          </div>
+        `).join('')
+      ).join('');
+    }
+
+    function filterCategory(id, btn) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      document.querySelectorAll('.menu-card').forEach(card => {
+        card.style.display = (id === 'all' || card.dataset.category === id) ? 'flex' : 'none';
+      });
+    }
+
+    function getCategoryEmoji(id) {
+      const emojis = { doners: '🌯', boxes: '📦', sides: '🍟', sauces: '🥫', drinks: '🥤', combos: '🎁' };
+      return emojis[id] || '🍽️';
+    }
+
+    loadMenu();
+  </script>
+</body>
+</html>

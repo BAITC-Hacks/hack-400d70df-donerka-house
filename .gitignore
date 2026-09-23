@@ -1,0 +1,23 @@
+# Binaries
+donerka-server
+*.exe
+
+# Environment files (NEVER commit these!)
+.env
+.env.local
+
+# Go build cache
+vendor/
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
