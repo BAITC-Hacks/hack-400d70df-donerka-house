@@ -12,43 +12,63 @@ import (
 )
 
 func loadCatalog() (*models.Catalog, error) {
-	catalog := &models.Catalog{}
+	catalog := &models.Catalog{
+		Details:      make(map[int]models.ProductDetail),
+		Certificates: make(map[int][]models.Certificate),
+	}
 
-	// Load products from both files and merge
+	// Load product summaries from both supplied pages and deduplicate by ID.
 	files := []string{"data/products.json", "data/products2.json"}
 	seen := map[int]bool{}
-
-	for _, f := range files {
-		data, err := os.ReadFile(f)
+	for _, file := range files {
+		data, err := os.ReadFile(file)
 		if err != nil {
-			log.Printf("Skipping %s: %v", f, err)
+			log.Printf("Skipping %s: %v", file, err)
 			continue
 		}
 		var page models.ProductsPage
 		if err := json.Unmarshal(data, &page); err != nil {
-			log.Printf("Error parsing %s: %v", f, err)
+			log.Printf("Error parsing %s: %v", file, err)
 			continue
 		}
-		for _, p := range page.Items {
-			if !seen[p.ID] {
-				catalog.Products = append(catalog.Products, p)
-				seen[p.ID] = true
+		for _, product := range page.Items {
+			if !seen[product.ID] {
+				catalog.Products = append(catalog.Products, product)
+				seen[product.ID] = true
 			}
 		}
-		log.Printf("✅ Loaded %d products from %s", len(page.Items), f)
+		log.Printf("Loaded %d products from %s", len(page.Items), file)
 	}
 
-	// Load product detail example
-	detailData, err := os.ReadFile("data/detail.json")
-	if err == nil {
+	if data, err := os.ReadFile("data/detail.json"); err == nil {
 		var detail models.ProductDetail
-		if err := json.Unmarshal(detailData, &detail); err == nil {
-			catalog.Detail = &detail
-			log.Printf("✅ Loaded product detail: %s", detail.Name)
+		if err := json.Unmarshal(data, &detail); err != nil {
+			log.Printf("Error parsing data/detail.json: %v", err)
+		} else {
+			catalog.Details[detail.ID] = detail
+			log.Printf("Loaded product detail: %s", detail.Name)
 		}
+	} else {
+		log.Printf("No local product detail file: %v", err)
 	}
 
-	log.Printf("📦 Total products in catalog: %d", len(catalog.Products))
+	if data, err := os.ReadFile("data/certificates.json"); err == nil {
+		if err := json.Unmarshal(data, &catalog.Certificates); err != nil {
+			log.Printf("Error parsing data/certificates.json: %v", err)
+		}
+	} else {
+		log.Printf("No certificate metadata file: %v", err)
+	}
+
+	if data, err := os.ReadFile("data/purchase_terms.json"); err == nil {
+		if err := json.Unmarshal(data, &catalog.Terms); err != nil {
+			log.Printf("Error parsing data/purchase_terms.json: %v", err)
+		}
+	} else {
+		log.Printf("No purchase terms file: %v", err)
+	}
+
+	log.Printf("Total products: %d; detailed records: %d", len(catalog.Products), len(catalog.Details))
 	return catalog, nil
 }
 
@@ -77,25 +97,32 @@ func main() {
 	}
 
 	if os.Getenv("OPENAI_API_KEY") == "" {
-		log.Println("⚠️  OPENAI_API_KEY not set — demo mode active")
+		log.Println("OPENAI_API_KEY not set — deterministic demo flows remain available")
 	} else {
-		log.Println("✅ OpenAI API key configured")
+		log.Println("OpenAI API key configured")
 	}
 
+	store := handlers.NewSessionStore()
 	mux := http.NewServeMux()
 
-	// Static files
+	mux.HandleFunc("/api/catalog", handlers.CatalogHandler(catalog))
+	mux.HandleFunc("/api/product/", handlers.ProductHandler(catalog))
+	mux.HandleFunc("/api/cart/", handlers.CartHandler(store))
+	mux.HandleFunc("/api/chat", handlers.ChatHandler(catalog, store))
+	mux.HandleFunc("/cart/", handlers.CartPageHandler(store))
+	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 	mux.Handle("/", http.FileServer(http.Dir("static")))
 
-	// API
-	mux.HandleFunc("/api/catalog", handlers.CatalogHandler(catalog))
-	mux.HandleFunc("/api/chat", handlers.ChatHandler(catalog))
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"status":"ok","products":%d}`, len(catalog.Products))
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":  "ok",
+			"products": len(catalog.Products),
+			"details": len(catalog.Details),
+		})
 	})
 
-	log.Printf("🚀 ekt.kz AI Assistant running on http://localhost:%s", port)
+	log.Printf("EKT.KZ AI Assistant running on http://localhost:%s", port)
 	if err := http.ListenAndServe(":"+port, corsMiddleware(mux)); err != nil {
 		log.Fatalf("Server error: %v", err)
 	}
