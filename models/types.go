@@ -22,6 +22,7 @@ type Product struct {
 	StockLocation      string            `json:"stock_location,omitempty"`
 	TotalStockQuantity int               `json:"total_stock_quantity,omitempty"`
 	Stores             []Store           `json:"stores,omitempty"`
+	Certificates       []string          `json:"certificates,omitempty"`
 }
 
 // ProductsPage represents a paginated list of products
@@ -163,6 +164,7 @@ type ProductResult struct {
 	StockLocation      string            `json:"stock_location,omitempty"`
 	TotalStockQuantity int               `json:"total_stock_quantity,omitempty"`
 	Stores             []Store           `json:"stores,omitempty"`
+	Certificates       []string          `json:"certificates,omitempty"`
 }
 
 // CartAction represents a directive to the frontend to add an item to the cart
