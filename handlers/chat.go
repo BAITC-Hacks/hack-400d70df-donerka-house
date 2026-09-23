@@ -327,6 +327,10 @@ func productInfoReply(catalog *models.Catalog, product *models.Product) string {
 	if detail.Quantity <= 0 {
 		return analogReply(catalog, product)
 	}
+	price := detail.Price
+	if price <= 0 {
+		price = product.Price
+	}
 
 	var inStock []string
 	for _, store := range detail.Stores {
@@ -339,7 +343,7 @@ func productInfoReply(catalog *models.Catalog, product *models.Product) string {
 		stock += " (" + strings.Join(inStock, ", ") + ")"
 	}
 	reply := fmt.Sprintf("«%s» — %.0f тг, в наличии %s.\n%s",
-		detail.Name, detail.Price, stock, detail.Description)
+		detail.Name, price, stock, detail.Description)
 	if certificates := catalog.Certificates[product.ID]; len(certificates) > 0 {
 		reply += "\nСертификат: " + certificates[0].Name + " — " + certificates[0].URL
 		if certificates[0].IsDemo {
@@ -465,6 +469,10 @@ func prepareAdd(store *SessionStore, catalog *models.Catalog, sessionID, message
 	if detail.Quantity <= 0 {
 		return analogReply(catalog, product), nil, true
 	}
+	price := detail.Price
+	if price <= 0 {
+		price = product.Price
+	}
 
 	requested := extractQuantity(message)
 	available := requested
@@ -475,10 +483,10 @@ func prepareAdd(store *SessionStore, catalog *models.Catalog, sessionID, message
 		ProductID: product.ID,
 		Article:   product.Article,
 		Name:      product.Name,
-		Price:     detail.Price,
+		Price:     price,
 		Quantity:  available,
 		Stock:     detail.Quantity,
-		Total:     detail.Price * float64(available),
+		Total:     price * float64(available),
 	}
 	setPending(store, sessionID, pending)
 	if requested > detail.Quantity {
