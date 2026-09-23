@@ -1,14 +1,22 @@
 package models
 
+import (
+	"strings"
+	"sync"
+)
+
 // Product represents a single product from the catalog
 type Product struct {
-	ID           int     `json:"id"`
-	Name         string  `json:"name"`
-	Article      string  `json:"article"`
-	Price        float64 `json:"price"`
-	Image        string  `json:"image"`
-	URL          string  `json:"url"`
-	URLAPIDetail string  `json:"url_api_detail"`
+	ID           int               `json:"id"`
+	Name         string            `json:"name"`
+	Article      string            `json:"article"`
+	Price        float64           `json:"price"`
+	Image        string            `json:"image"`
+	URL          string            `json:"url"`
+	URLAPIDetail string            `json:"url_api_detail"`
+	Description  string            `json:"description,omitempty"`
+	Properties   map[string]string `json:"properties,omitempty"`
+	Source       string            `json:"source,omitempty"`
 }
 
 // ProductsPage represents a paginated list of products
@@ -44,6 +52,42 @@ type ProductDetail struct {
 type Catalog struct {
 	Products []Product
 	Detail   *ProductDetail // example detail record
+	mu       sync.RWMutex
+}
+
+func (c *Catalog) ProductsSnapshot() []Product {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	products := make([]Product, len(c.Products))
+	copy(products, c.Products)
+	return products
+}
+
+func (c *Catalog) AddProducts(products []Product) {
+	if len(products) == 0 {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	seen := make(map[string]struct{}, len(c.Products)+len(products))
+	for _, product := range c.Products {
+		seen[strings.ToLower(product.Article)+"|"+strings.ToLower(product.URL)] = struct{}{}
+	}
+	for _, product := range products {
+		key := strings.ToLower(product.Article) + "|" + strings.ToLower(product.URL)
+		if product.Name != "" && product.URL != "" {
+			if _, exists := seen[key]; !exists {
+				c.Products = append(c.Products, product)
+				seen[key] = struct{}{}
+			}
+		}
+	}
+}
+
+func (c *Catalog) ProductCount() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return len(c.Products)
 }
 
 // ChatRequest is the incoming user message
@@ -53,12 +97,15 @@ type ChatRequest struct {
 
 // ProductResult is a matched product returned alongside the AI reply
 type ProductResult struct {
-	ID      int     `json:"id"`
-	Name    string  `json:"name"`
-	Article string  `json:"article"`
-	Price   float64 `json:"price"`
-	Image   string  `json:"image"`
-	URL     string  `json:"url"`
+	ID          int               `json:"id"`
+	Name        string            `json:"name"`
+	Article     string            `json:"article"`
+	Price       float64           `json:"price"`
+	Image       string            `json:"image"`
+	URL         string            `json:"url"`
+	Description string            `json:"description,omitempty"`
+	Properties  map[string]string `json:"properties,omitempty"`
+	Source      string            `json:"source,omitempty"`
 }
 
 // CartAction represents a directive to the frontend to add an item to the cart

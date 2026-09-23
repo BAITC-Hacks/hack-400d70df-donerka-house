@@ -84,17 +84,19 @@ func main() {
 
 	mux := http.NewServeMux()
 	cartStore := handlers.NewCartStore()
+	liveCatalog := handlers.NewLiveCatalog(os.Getenv("EKT_CATALOG_URL"))
+	conversationStore := handlers.NewConversationStore()
 
 	// Static files
 	mux.Handle("/", http.FileServer(http.Dir("static")))
 
 	// API
 	mux.HandleFunc("/api/catalog", handlers.CatalogHandler(catalog))
-	mux.HandleFunc("/api/chat", handlers.ChatHandler(catalog, cartStore))
+	mux.HandleFunc("/api/chat", handlers.ChatHandler(catalog, cartStore, liveCatalog, conversationStore))
 	mux.HandleFunc("/api/cart", handlers.CartHandler(catalog, cartStore))
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"status":"ok","products":%d}`, len(catalog.Products))
+		fmt.Fprintf(w, `{"status":"ok","products":%d}`, catalog.ProductCount())
 	})
 
 	log.Printf("🚀 ekt.kz AI Assistant running on http://localhost:%s", port)

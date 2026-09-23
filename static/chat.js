@@ -268,11 +268,8 @@ function appendProductCards(products) {
   cardsWrap.className = 'product-cards-row';
 
   products.forEach(product => {
-    const card = document.createElement('a');
+    const card = document.createElement('div');
     card.className = 'chat-product-card';
-    card.href = safeURL(product.url);
-    card.target = '_blank';
-    card.rel = 'noopener noreferrer';
 
     const imgWrap = document.createElement('div');
     imgWrap.className = 'chat-product-img-wrap';
@@ -303,10 +300,22 @@ function appendProductCards(products) {
     const price = document.createElement('span');
     price.className = 'chat-product-price';
     price.textContent = product.price ? product.price.toLocaleString('ru-KZ') + ' тг' : 'По запросу';
-    const link = document.createElement('span');
+    const link = document.createElement('a');
     link.className = 'chat-product-link';
     link.textContent = 'Подробнее →';
-    footer.append(price, link);
+    link.href = safeURL(product.url);
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    const addButton = document.createElement('button');
+    addButton.type = 'button';
+    addButton.className = 'chat-add-btn';
+    addButton.textContent = 'В корзину';
+    addButton.addEventListener('click', () => addToCart({
+      article: product.article,
+      name: product.name,
+      quantity: 1,
+    }));
+    footer.append(price, link, addButton);
     info.append(article, name, footer);
     card.append(imgWrap, info);
     cardsWrap.appendChild(card);

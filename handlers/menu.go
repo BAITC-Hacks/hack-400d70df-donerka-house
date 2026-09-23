@@ -20,9 +20,9 @@ func CatalogHandler(catalog *models.Catalog) http.HandlerFunc {
 
 		page := models.ProductsPage{
 			Page:    1,
-			PerPage: len(catalog.Products),
-			Count:   len(catalog.Products),
-			Items:   catalog.Products,
+			PerPage: catalog.ProductCount(),
+			Count:   catalog.ProductCount(),
+			Items:   catalog.ProductsSnapshot(),
 		}
 		json.NewEncoder(w).Encode(page)
 	}

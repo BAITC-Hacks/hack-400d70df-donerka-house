@@ -89,7 +89,7 @@ func TestCartSessionsAreIsolated(t *testing.T) {
 func TestDemoChatAddsExplicitProductRequest(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "")
 	store := NewCartStore()
-	handler := ChatHandler(testCatalog(), store)
+	handler := ChatHandler(testCatalog(), store, nil, NewConversationStore())
 	response := doJSONRequest(handler, http.MethodPost, "/api/chat", []byte(`{"message":"Добавь в корзину 027228, 2 шт."}`), nil)
 	if response.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", response.Code)

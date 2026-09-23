@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/BAITC-Hacks/hack-400d70df-donerka-house/models"
@@ -53,7 +54,9 @@ const systemPromptBase = `Ты — умный AI-ассистент интерн
 
 Важно:
 - Для add_to_cart передавай настоящий артикул из каталога и положительное количество.
-- Используй add_to_cart только после явного согласия клиента, а не просто при рекомендации товара.
+- Используй add_to_cart после явного выбора клиента. Фразы «беру этот», «выбираю первый», «добавь» и аналогичные уже являются согласием — НЕ спрашивай повторное подтверждение.
+- Если клиент спрашивает «для чего это», «где применяется», «чем отличается» или задаёт технический вопрос, объясни назначение, применение, ограничения и ключевые характеристики выбранного товара по данным из актуального контекста сайта.
+- Не утверждай наличие на складе, если оно не указано в данных. Не выдумывай характеристики.
 - Все цены в тенге (тг / KZT)
 - Если клиент спрашивает конкретный товар — он будет показан отдельно карточками с фото, просто дай краткое текстовое описание
 - Отвечай на русском (или на языке клиента)
@@ -62,23 +65,40 @@ const systemPromptBase = `Ты — умный AI-ассистент интерн
 
 `
 
-var addIntentPattern = regexp.MustCompile(`(?i)(добав(?:ь|ить|ьте)|хочу\s+куп|покупаю|купить|беру|add\s+(?:this\s+)?(?:to\s+)?cart|buy|purchase)`)
+var addIntentPattern = regexp.MustCompile(`(?i)(добав(?:ь|ить|ьте)|хочу\s+куп|покупаю|купить|беру|выбира(?:ю|ем)|выбрал|выбрала|add\s+(?:this\s+)?(?:to\s+)?cart|buy|purchase|i\s+(?:choose|want\s+this)|this\s+one|that\s+one|first\s+one)`)
 var quantityAfterLabelPattern = regexp.MustCompile(`(?i)(?:x|×|колич(?:ество|\-во)?|шт\.?|штук(?:и)?)\s*[:=]?\s*(\d+)`)
 var quantityBeforeUnitPattern = regexp.MustCompile(`(?i)\b(\d+)\s*(?:шт\.?|штук(?:и)?|pcs)`)
+var productChoicePattern = regexp.MustCompile(`(?i)(перв|втор|трет|четверт|номер\s*\d+|№\s*\d+|first|second|third|fourth)`)
 
 // buildSystemPrompt creates the AI prompt with embedded product data.
-func buildSystemPrompt(catalog *models.Catalog) string {
+func buildSystemPrompt(catalog *models.Catalog, relevant ...[]models.Product) string {
 	prompt := systemPromptBase
+	products := catalog.ProductsSnapshot()
 
-	if len(catalog.Products) > 0 {
+	if len(products) > 0 {
 		prompt += "## Товары в каталоге (используй для ответов):\n"
-		limit := len(catalog.Products)
+		limit := len(products)
 		if limit > 50 {
 			limit = 50
 		}
-		for _, p := range catalog.Products[:limit] {
+		for _, p := range products[:limit] {
 			prompt += fmt.Sprintf("- [Арт: %s | ID: %d] %s — %.0f тг\n", p.Article, p.ID, p.Name, p.Price)
 		}
+	}
+
+	if len(relevant) > 0 && len(relevant[0]) > 0 {
+		prompt += "\n## Актуальные товары и сведения с публичного сайта nursultan.ekt.kz:\n"
+		for index, product := range relevant[0] {
+			prompt += fmt.Sprintf("%d. [Арт: %s] %s — %.0f тг\n", index+1, product.Article, product.Name, product.Price)
+			if product.Description != "" {
+				prompt += "   Описание и назначение: " + product.Description + "\n"
+			}
+			for name, value := range product.Properties {
+				prompt += fmt.Sprintf("   Характеристика — %s: %s\n", name, value)
+			}
+			prompt += "   Ссылка: " + product.URL + "\n"
+		}
+		prompt += "Объясняй назначение, применение, ограничения и ключевые характеристики только по этим сведениям или явно отмечай, если данных недостаточно. Если пользователь выбрал товар словами «беру», «выбираю этот/первый» или аналогично, считай это согласием и сразу вызывай add_to_cart без дополнительного вопроса-подтверждения.\n"
 	}
 
 	if catalog.Detail != nil {
@@ -132,7 +152,7 @@ func searchProducts(catalog *models.Catalog, query string, limit int) []models.P
 		score int
 	}
 	var results []scored
-	for _, p := range catalog.Products {
+	for _, p := range catalog.ProductsSnapshot() {
 		if score := scoreProduct(p, tokens); score > 0 {
 			results = append(results, scored{p: p, score: score})
 		}
@@ -150,12 +170,15 @@ func searchProducts(catalog *models.Catalog, query string, limit int) []models.P
 			break
 		}
 		out = append(out, models.ProductResult{
-			ID:      result.p.ID,
-			Name:    result.p.Name,
-			Article: result.p.Article,
-			Price:   result.p.Price,
-			Image:   result.p.Image,
-			URL:     result.p.URL,
+			ID:          result.p.ID,
+			Name:        result.p.Name,
+			Article:     result.p.Article,
+			Price:       result.p.Price,
+			Image:       result.p.Image,
+			URL:         result.p.URL,
+			Description: result.p.Description,
+			Properties:  result.p.Properties,
+			Source:      result.p.Source,
 		})
 	}
 	return out
@@ -166,17 +189,18 @@ func findProductByReference(catalog *models.Catalog, reference string) *models.P
 	if reference == "" {
 		return nil
 	}
-	for i := range catalog.Products {
-		product := &catalog.Products[i]
+	products := catalog.ProductsSnapshot()
+	for i := range products {
+		product := &products[i]
 		if strings.ToLower(product.Article) == reference || strconv.Itoa(product.ID) == reference {
 			return product
 		}
 	}
 	// Supplier/article codes such as 027228 are present in the product name
 	// while the API article may be a different internal code.
-	for i := range catalog.Products {
-		if strings.Contains(strings.ToLower(catalog.Products[i].Name), reference) {
-			return &catalog.Products[i]
+	for i := range products {
+		if strings.Contains(strings.ToLower(products[i].Name), reference) {
+			return &products[i]
 		}
 	}
 	return nil
@@ -198,7 +222,15 @@ func requestedQuantity(message string) int {
 	return 1
 }
 
-func inferProductForAdd(catalog *models.Catalog, message string) *models.Product {
+func inferProductForAdd(catalog *models.Catalog, message string, contextProducts ...[]models.Product) *models.Product {
+	if len(contextProducts) > 0 {
+		if selected := selectedProductFromContext(message, contextProducts[0]); selected != nil {
+			return selected
+		}
+		if len(contextProducts[0]) == 1 && regexp.MustCompile(`(?i)(этот|это|this|that)`).MatchString(message) {
+			return &contextProducts[0][0]
+		}
+	}
 	for _, token := range tokenize(message) {
 		if len(token) >= 3 {
 			if product := findProductByReference(catalog, token); product != nil {
@@ -213,6 +245,32 @@ func inferProductForAdd(catalog *models.Catalog, message string) *models.Product
 	return nil
 }
 
+func selectedProductFromContext(message string, products []models.Product) *models.Product {
+	if len(products) == 0 || !productChoicePattern.MatchString(message) {
+		return nil
+	}
+	index := 0
+	lower := strings.ToLower(message)
+	switch {
+	case strings.Contains(lower, "втор") || strings.Contains(lower, "second"):
+		index = 1
+	case strings.Contains(lower, "трет") || strings.Contains(lower, "third"):
+		index = 2
+	case strings.Contains(lower, "четверт") || strings.Contains(lower, "fourth"):
+		index = 3
+	default:
+		matches := regexp.MustCompile(`(?i)(?:номер|№)\s*(\d+)`).FindStringSubmatch(message)
+		if len(matches) == 2 {
+			index, _ = strconv.Atoi(matches[1])
+			index--
+		}
+	}
+	if index >= 0 && index < len(products) {
+		return &products[index]
+	}
+	return nil
+}
+
 func cartAction(product *models.Product, quantity int) *models.CartAction {
 	return &models.CartAction{
 		Article:  product.Article,
@@ -222,7 +280,7 @@ func cartAction(product *models.Product, quantity int) *models.CartAction {
 	}
 }
 
-func addToCartFromMessage(catalog *models.Catalog, store *CartStore, sessionID, message string) (*models.CartAction, *models.CartResponse, string) {
+func addToCartFromMessage(catalog *models.Catalog, store *CartStore, sessionID, message string, contextProducts ...[]models.Product) (*models.CartAction, *models.CartResponse, string) {
 	if !hasAddIntent(message) {
 		return nil, nil, ""
 	}
@@ -230,7 +288,7 @@ func addToCartFromMessage(catalog *models.Catalog, store *CartStore, sessionID, 
 	if quantity < 1 || quantity > maxCartQuantity {
 		return nil, nil, "Количество должно быть от 1 до 999."
 	}
-	product := inferProductForAdd(catalog, message)
+	product := inferProductForAdd(catalog, message, contextProducts...)
 	if product == nil {
 		return nil, nil, "Уточните артикул или выберите один товар из карточек, чтобы я добавил его в корзину."
 	}
@@ -238,7 +296,7 @@ func addToCartFromMessage(catalog *models.Catalog, store *CartStore, sessionID, 
 	return cartAction(product, quantity), &cart, fmt.Sprintf("✅ Добавил «%s» (%d шт.) в корзину.", product.Name, quantity)
 }
 
-func addToCartFromTool(catalog *models.Catalog, store *CartStore, sessionID, userMessage string, arguments string) (*models.CartAction, *models.CartResponse, map[string]any) {
+func addToCartFromTool(catalog *models.Catalog, store *CartStore, sessionID, userMessage string, arguments string, contextProducts ...[]models.Product) (*models.CartAction, *models.CartResponse, map[string]any) {
 	var args models.CartRequest
 	if err := json.Unmarshal([]byte(arguments), &args); err != nil {
 		return nil, nil, map[string]any{"ok": false, "error": "invalid_arguments"}
@@ -250,6 +308,9 @@ func addToCartFromTool(catalog *models.Catalog, store *CartStore, sessionID, use
 		return nil, nil, map[string]any{"ok": false, "error": "quantity_must_be_between_1_and_999"}
 	}
 	product := findProductByReference(catalog, args.Article)
+	if product == nil && len(contextProducts) > 0 {
+		product = selectedProductFromContext(userMessage, contextProducts[0])
+	}
 	if product == nil {
 		return nil, nil, map[string]any{"ok": false, "error": "product_not_found"}
 	}
@@ -268,7 +329,7 @@ func addToCartTool() openai.Tool {
 		Type: openai.ToolTypeFunction,
 		Function: &openai.FunctionDefinition{
 			Name:        "add_to_cart",
-			Description: "Adds one catalog product to the current user's cart after explicit customer consent. The server validates the article and quantity.",
+			Description: "Adds one catalog product to the current user's cart after the customer clearly chooses it. Do not ask for a second confirmation after phrases such as 'I will take this', 'the first one', or 'add it'. The server validates the article and quantity.",
 			Parameters: map[string]any{
 				"type":                 "object",
 				"additionalProperties": false,
@@ -312,9 +373,66 @@ func createCompletion(ctx context.Context, client *openai.Client, messages []ope
 	return response, err
 }
 
+func uniqueProducts(groups ...[]models.Product) []models.Product {
+	result := make([]models.Product, 0, 8)
+	seen := make(map[string]struct{})
+	for _, group := range groups {
+		for _, product := range group {
+			key := strings.ToLower(product.Article) + "|" + strings.ToLower(product.URL)
+			if product.Name == "" || key == "|" {
+				continue
+			}
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			result = append(result, product)
+			if len(result) == 4 {
+				return result
+			}
+		}
+	}
+	return result
+}
+
+func productsForResults(catalog *models.Catalog, results []models.ProductResult) []models.Product {
+	products := catalog.ProductsSnapshot()
+	result := make([]models.Product, 0, len(results))
+	for _, match := range results {
+		for _, product := range products {
+			if strings.EqualFold(product.Article, match.Article) {
+				result = append(result, product)
+				break
+			}
+		}
+	}
+	return result
+}
+
+func productResultsFromProducts(products []models.Product) []models.ProductResult {
+	results := make([]models.ProductResult, 0, len(products))
+	for _, product := range products {
+		results = append(results, models.ProductResult{
+			ID:          product.ID,
+			Name:        product.Name,
+			Article:     product.Article,
+			Price:       product.Price,
+			Image:       product.Image,
+			URL:         product.URL,
+			Description: product.Description,
+			Properties:  product.Properties,
+			Source:      product.Source,
+		})
+	}
+	return results
+}
+
 // ChatHandler handles POST /api/chat.
-func ChatHandler(catalog *models.Catalog, store *CartStore) http.HandlerFunc {
+func ChatHandler(catalog *models.Catalog, store *CartStore, live *LiveCatalog, conversations *ConversationStore) http.HandlerFunc {
 	apiKey := os.Getenv("OPENAI_API_KEY")
+	if conversations == nil {
+		conversations = NewConversationStore()
+	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -335,26 +453,43 @@ func ChatHandler(catalog *models.Catalog, store *CartStore) http.HandlerFunc {
 			writeJSONError(w, http.StatusInternalServerError, "Could not create a chat session")
 			return
 		}
+		_, recentProducts := conversations.get(sessionID)
+		liveProducts := make([]models.Product, 0)
+		if live != nil {
+			liveContext, cancel := context.WithTimeout(r.Context(), 7*time.Second)
+			liveProducts, _ = live.Search(liveContext, req.Message)
+			liveProducts = live.Enrich(liveContext, liveProducts)
+			cancel()
+			catalog.AddProducts(liveProducts)
+		}
+		contextProducts := uniqueProducts(liveProducts, recentProducts)
 		matchedProducts := searchProducts(catalog, req.Message, 4)
+		if len(matchedProducts) == 0 && len(recentProducts) > 0 {
+			matchedProducts = productResultsFromProducts(recentProducts)
+		}
+		if len(contextProducts) == 0 {
+			contextProducts = productsForResults(catalog, matchedProducts)
+		}
 
 		if apiKey == "" {
-			action, cart, addReply := addToCartFromMessage(catalog, store, sessionID, req.Message)
+			action, cart, addReply := addToCartFromMessage(catalog, store, sessionID, req.Message, contextProducts)
 			reply := addReply
 			if reply == "" {
 				reply = "Здравствуйте! 👋 Я AI-ассистент ГК Электрокомплект.\n\n" +
 					"(Демо-режим — настройте OPENAI_API_KEY для полноценного ИИ)\n\n" +
 					"Звоните: 📞 +7 (727) 346-88-88"
 			}
+			conversations.append(sessionID, req.Message, reply, contextProducts)
 			writeJSON(w, models.ChatResponse{Reply: reply, Products: matchedProducts, CartAction: action, Cart: cart})
 			return
 		}
 
 		client := openai.NewClient(apiKey)
 		tools := []openai.Tool{addToCartTool()}
-		messages := []openai.ChatCompletionMessage{
-			{Role: openai.ChatMessageRoleSystem, Content: buildSystemPrompt(catalog)},
-			{Role: openai.ChatMessageRoleUser, Content: req.Message},
-		}
+		history, _ := conversations.get(sessionID)
+		messages := []openai.ChatCompletionMessage{{Role: openai.ChatMessageRoleSystem, Content: buildSystemPrompt(catalog, contextProducts)}}
+		messages = append(messages, history...)
+		messages = append(messages, openai.ChatCompletionMessage{Role: openai.ChatMessageRoleUser, Content: req.Message})
 		first, err := createCompletion(r.Context(), client, messages, tools, "auto")
 		if err != nil || len(first.Choices) == 0 {
 			writeJSON(w, models.ChatResponse{
@@ -366,6 +501,7 @@ func ChatHandler(catalog *models.Catalog, store *CartStore) http.HandlerFunc {
 
 		assistantMessage := first.Choices[0].Message
 		if len(assistantMessage.ToolCalls) == 0 {
+			conversations.append(sessionID, req.Message, assistantMessage.Content, contextProducts)
 			writeJSON(w, models.ChatResponse{Reply: assistantMessage.Content, Products: matchedProducts})
 			return
 		}
@@ -378,7 +514,7 @@ func ChatHandler(catalog *models.Catalog, store *CartStore) http.HandlerFunc {
 				continue
 			}
 			var result map[string]any
-			action, cart, result = addToCartFromTool(catalog, store, sessionID, req.Message, toolCall.Function.Arguments)
+			action, cart, result = addToCartFromTool(catalog, store, sessionID, req.Message, toolCall.Function.Arguments, contextProducts)
 			encodedResult, _ := json.Marshal(result)
 			messages = append(messages, openai.ChatCompletionMessage{
 				Role:       openai.ChatMessageRoleTool,
@@ -398,6 +534,7 @@ func ChatHandler(catalog *models.Catalog, store *CartStore) http.HandlerFunc {
 		if reply == "" {
 			reply = "Не удалось обработать запрос. Уточните артикул товара."
 		}
+		conversations.append(sessionID, req.Message, reply, contextProducts)
 		writeJSON(w, models.ChatResponse{Reply: reply, Products: matchedProducts, CartAction: action, Cart: cart})
 	}
 }

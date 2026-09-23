@@ -282,7 +282,7 @@ button { font-family: inherit; cursor: pointer; }
   text-decoration: none;
   color: var(--text);
   transition: all .2s;
-  cursor: pointer;
+  cursor: default;
 }
 .chat-product-card:hover {
   border-color: var(--primary);
@@ -359,6 +359,12 @@ button { font-family: inherit; cursor: pointer; }
   color: var(--blue);
   white-space: nowrap;
 }
+.chat-add-btn {
+  border: 0; border-radius: 5px; padding: 4px 7px;
+  background: var(--primary); color: #fff; font-size: .68rem; font-weight: 700;
+  white-space: nowrap;
+}
+.chat-add-btn:hover { background: var(--primary-dark); }
 .chat-product-card:hover .chat-product-link {
   color: var(--primary);
 }

@@ -1,0 +1,38 @@
+package handlers
+
+import (
+	"strings"
+	"testing"
+
+	"golang.org/x/net/html"
+)
+
+func TestParseLiveCardAndDetail(t *testing.T) {
+	cardHTML := `<div id="bx_1_56259_hash" class="col-md-3 product-card-out product-card-out-catalog">
+  <div class="product-card-image"><a href="/catalog/tool/"><img src="/upload/tool.jpg"></a></div>
+  <a href="/catalog/tool/"><h3 class="product-title">Тестовый стриппер</h3></a>
+  <div class="price">29 990 ₸</div>
+  <div class="product-article">Код товара 311101258_</div>
+</div>`
+	root, err := html.Parse(strings.NewReader(cardHTML))
+	if err != nil {
+		t.Fatal(err)
+	}
+	card := findDescendant(root, func(node *html.Node) bool { return hasClass(node, "product-card-out-catalog") })
+	product := parseLiveCard("https://nursultan.ekt.kz", card)
+	if product.ID != 56259 || product.Article != "311101258_" || product.Price != 29990 || product.URL != "https://nursultan.ekt.kz/catalog/tool/" {
+		t.Fatalf("unexpected parsed card: %+v", product)
+	}
+
+	detailHTML := `<div class="detail_tabs__body__item" tab="description"><div class="detail_tabs__body__item__value">Используется для снятия изоляции.</div></div>
+<div class="detail_info__price__site__value">29 990 ₸</div>
+<div class="tab_item_chars__item"><div class="tab_item_chars__item__name">Диапазон:</div><div class="tab_item_chars__item__value">6-16 мм²</div></div>`
+	detailRoot, err := html.Parse(strings.NewReader(detailHTML))
+	if err != nil {
+		t.Fatal(err)
+	}
+	parseLiveDetail(&product, detailRoot)
+	if product.Description != "Используется для снятия изоляции." || product.Properties["Диапазон"] != "6-16 мм²" {
+		t.Fatalf("unexpected parsed detail: %+v", product)
+	}
+}
