@@ -1,9 +1,30 @@
 // ===================== CHAT.JS — EKT.KZ AI Assistant =====================
 
 const API_CHAT = '/api/chat';
+const SESSION_STORAGE_KEY = 'ekt_session_id';
 let isOpen = false;
 let isBusy = false;
 let chipsHidden = false;
+
+function makeSessionId() {
+  if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+    return window.crypto.randomUUID();
+  }
+  return 'session-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+}
+
+let sessionId = localStorage.getItem(SESSION_STORAGE_KEY);
+if (!sessionId) {
+  sessionId = makeSessionId();
+  localStorage.setItem(SESSION_STORAGE_KEY, sessionId);
+}
+
+function updateCartLink(url) {
+  const link = document.getElementById('cartLink');
+  if (link) {
+    link.href = url || ('/cart/' + encodeURIComponent(sessionId));
+  }
+}
 
 function toggleChat() {
   const widget = document.getElementById('chatWidget');
@@ -55,7 +76,7 @@ async function sendText(text) {
     const res = await fetch(API_CHAT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: text }),
+      body: JSON.stringify({ message: text, session_id: sessionId }),
     });
 
     removeTyping(typingId);
@@ -65,7 +86,13 @@ async function sendText(text) {
       appendMsg('⚠️ ' + (err.error || 'Ошибка. Попробуйте снова.'), 'bot');
     } else {
       const data = await res.json();
+      if (data.session_id) {
+        sessionId = data.session_id;
+        localStorage.setItem(SESSION_STORAGE_KEY, sessionId);
+      }
+      updateCartLink(data.cart_url);
       appendMsg(data.reply || '...', 'bot');
+      if (data.cart_url) appendCartLink(data.cart_url);
     }
   } catch {
     removeTyping(typingId);
@@ -81,11 +108,10 @@ async function sendText(text) {
 function appendMsg(text, role) {
   const container = document.getElementById('chatMessages');
   const wrap = document.createElement('div');
-  wrap.className = `msg ${role}`;
+  wrap.className = 'msg ' + role;
 
   const bubble = document.createElement('div');
   bubble.className = 'msg-bubble';
-  // Keep model output as text. Do not inject it through innerHTML.
   String(text ?? '').split('\n').forEach((line, index) => {
     if (index > 0) bubble.appendChild(document.createElement('br'));
     bubble.appendChild(document.createTextNode(line));
@@ -101,13 +127,28 @@ function appendMsg(text, role) {
   scrollBottom();
 }
 
+function appendCartLink(url) {
+  const container = document.getElementById('chatMessages');
+  const wrap = document.createElement('div');
+  wrap.className = 'msg bot';
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble';
+  const link = document.createElement('a');
+  link.href = url;
+  link.textContent = '🛒 Открыть корзину';
+  link.className = 'chat-cart-link';
+  bubble.appendChild(link);
+  wrap.appendChild(bubble);
+  container.appendChild(wrap);
+}
+
 function showTyping() {
   const id = 'typ-' + Date.now();
   const container = document.getElementById('chatMessages');
   const wrap = document.createElement('div');
   wrap.id = id;
   wrap.className = 'msg bot typing';
-  wrap.innerHTML = `<div class="msg-bubble"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>`;
+  wrap.innerHTML = '<div class="msg-bubble"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>';
   container.appendChild(wrap);
   scrollBottom();
   return id;
@@ -125,10 +166,13 @@ function scrollBottom() {
 
 function now() {
   const d = new Date();
-  return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+  return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
 }
 
-// Close on outside click
+document.addEventListener('DOMContentLoaded', () => {
+  updateCartLink();
+});
+
 document.addEventListener('click', e => {
   const widget = document.getElementById('chatWidget');
   const bubble = document.getElementById('chatBubble');
@@ -136,4 +180,3 @@ document.addEventListener('click', e => {
     toggleChat();
   }
 });
-
