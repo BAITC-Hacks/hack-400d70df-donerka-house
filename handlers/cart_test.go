@@ -43,38 +43,30 @@ func sessionCookie(t *testing.T, response *httptest.ResponseRecorder) *http.Cook
 	return nil
 }
 
-func TestCartHandlerAddsAndReadsSessionCart(t *testing.T) {
+func TestCartHandlerReadsSessionCart(t *testing.T) {
 	store := NewCartStore()
 	handler := CartHandler(testCatalog(), store)
 
-	addResponse := doJSONRequest(handler, http.MethodPost, "/api/cart", []byte(`{"article":"027228","quantity":2}`), nil)
-	if addResponse.Code != http.StatusOK {
-		t.Fatalf("expected add status 200, got %d: %s", addResponse.Code, addResponse.Body.String())
-	}
-	cookie := sessionCookie(t, addResponse)
-	var cart models.CartResponse
-	if err := json.NewDecoder(addResponse.Body).Decode(&cart); err != nil {
-		t.Fatal(err)
-	}
-	if cart.Count != 2 || cart.Total != 129840 || len(cart.Items) != 1 {
-		t.Fatalf("unexpected cart after add: %+v", cart)
-	}
+	initial := doJSONRequest(handler, http.MethodGet, "/api/cart", nil, nil)
+	cookie := sessionCookie(t, initial)
+	product := testCatalog().Products[0]
+	store.add(cookie.Value, product, 2)
 
 	readResponse := doJSONRequest(handler, http.MethodGet, "/api/cart", nil, cookie)
 	var readCart models.CartResponse
 	if err := json.NewDecoder(readResponse.Body).Decode(&readCart); err != nil {
 		t.Fatal(err)
 	}
-	if readCart.Count != 2 || readCart.Items[0].Article != "200300285_" {
+	if readCart.Count != 2 || readCart.Total != 129840 || len(readCart.Items) != 1 || readCart.Items[0].Article != "200300285_" {
 		t.Fatalf("cart was not retained in session: %+v", readCart)
 	}
 }
 
-func TestCartHandlerRejectsInvalidQuantity(t *testing.T) {
+func TestCartHandlerRejectsDirectAddWithoutChatConfirmation(t *testing.T) {
 	handler := CartHandler(testCatalog(), NewCartStore())
-	response := doJSONRequest(handler, http.MethodPost, "/api/cart", []byte(`{"article":"200300285_","quantity":0}`), nil)
-	if response.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", response.Code)
+	response := doJSONRequest(handler, http.MethodPost, "/api/cart", []byte(`{"article":"200300285_","quantity":1}`), nil)
+	if response.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d: %s", response.Code, response.Body.String())
 	}
 }
 
@@ -138,11 +130,22 @@ func TestChatDoesNotAddBeforeConfirmationEvenWithAPIKey(t *testing.T) {
 }
 
 
-func TestCartHandlerRejectsQuantityAboveStock(t *testing.T) {
-	handler := CartHandler(testCatalog(), NewCartStore())
-	response := doJSONRequest(handler, http.MethodPost, "/api/cart", []byte(`{"article":"200300285_","quantity":6}`), nil)
-	if response.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for quantity above stock, got %d: %s", response.Code, response.Body.String())
+func TestChatRejectsQuantityAboveStock(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "")
+	handler := ChatHandler(testCatalog(), NewCartStore(), nil, NewConversationStore())
+	response := doJSONRequest(handler, http.MethodPost, "/api/chat", []byte(`{"message":"Добавь 6 шт товара 027228"}`), nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", response.Code, response.Body.String())
+	}
+	var chat models.ChatResponse
+	if err := json.NewDecoder(response.Body).Decode(&chat); err != nil {
+		t.Fatal(err)
+	}
+	if chat.CartAction != nil || chat.Cart != nil {
+		t.Fatalf("cart must not change when requested quantity exceeds stock: %+v", chat)
+	}
+	if !strings.Contains(chat.Reply, "Доступно только 5 шт") {
+		t.Fatalf("expected stock-limit explanation, got %q", chat.Reply)
 	}
 }
 
@@ -156,6 +159,35 @@ func TestPurchaseTermsAnswerIncludesMinimumBatch(t *testing.T) {
 	}
 	if !strings.Contains(chat.Reply, "минимальная партия") || !strings.Contains(chat.Reply, "1 шт") {
 		t.Fatalf("expected purchase terms with minimum batch, got %q", chat.Reply)
+	}
+}
+
+
+func TestBareYesDoesNotConfirmPendingCart(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "")
+	store := NewCartStore()
+	conversations := NewConversationStore()
+	handler := ChatHandler(testCatalog(), store, nil, conversations)
+
+	first := doJSONRequest(handler, http.MethodPost, "/api/chat", []byte(`{"message":"Добавь 2 шт товара 027228"}`), nil)
+	cookie := sessionCookie(t, first)
+
+	second := doJSONRequest(handler, http.MethodPost, "/api/chat", []byte(`{"message":"да"}`), cookie)
+	var chat models.ChatResponse
+	if err := json.NewDecoder(second.Body).Decode(&chat); err != nil {
+		t.Fatal(err)
+	}
+	if chat.CartAction != nil || chat.Cart != nil {
+		t.Fatalf("bare yes must not change cart: %+v", chat)
+	}
+
+	cartResponse := doJSONRequest(CartHandler(testCatalog(), store), http.MethodGet, "/api/cart", nil, cookie)
+	var cart models.CartResponse
+	if err := json.NewDecoder(cartResponse.Body).Decode(&cart); err != nil {
+		t.Fatal(err)
+	}
+	if cart.Count != 0 {
+		t.Fatalf("expected empty cart after bare yes, got %+v", cart)
 	}
 }
 
