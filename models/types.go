@@ -226,12 +226,13 @@ type CartRequest struct {
 
 // ChatResponse is the AI reply + optional matched products and cart actions
 type ChatResponse struct {
-	Reply      string          `json:"reply"`
-	Products   []ProductResult `json:"products,omitempty"`
-	Analogs    []ProductResult `json:"analogs,omitempty"`
-	CartAction *CartAction     `json:"cart_action,omitempty"`
-	Cart       *CartResponse   `json:"cart,omitempty"`
-	CartURL    string          `json:"cart_url,omitempty"`
+	Reply       string          `json:"reply"`
+	Products    []ProductResult `json:"products,omitempty"`
+	Analogs     []ProductResult `json:"analogs,omitempty"`
+	CartAction  *CartAction     `json:"cart_action,omitempty"`
+	CartActions []CartAction    `json:"cart_actions,omitempty"`
+	Cart        *CartResponse   `json:"cart,omitempty"`
+	CartURL     string          `json:"cart_url,omitempty"`
 }
 
 // ErrorResponse is a standard error

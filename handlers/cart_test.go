@@ -13,9 +13,9 @@ import (
 
 func testCatalog() *models.Catalog {
 	return &models.Catalog{Products: []models.Product{{
-		ID:      515291,
-		Name:    "027228 АВ DRX250 MT 3ф 160А Legrand",
-		Article: "200300285_",
+		ID:            515291,
+		Name:          "027228 АВ DRX250 MT 3ф 160А Legrand",
+		Article:       "200300285_",
 		Price:         64920,
 		Availability:  "В наличии",
 		StockQuantity: 5,
@@ -129,7 +129,6 @@ func TestChatDoesNotAddBeforeConfirmationEvenWithAPIKey(t *testing.T) {
 	}
 }
 
-
 func TestChatRejectsQuantityAboveStock(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "")
 	handler := ChatHandler(testCatalog(), NewCartStore(), nil, NewConversationStore())
@@ -162,7 +161,6 @@ func TestPurchaseTermsAnswerIncludesMinimumBatch(t *testing.T) {
 	}
 }
 
-
 func TestBareYesDoesNotConfirmPendingCart(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "")
 	store := NewCartStore()
@@ -191,6 +189,60 @@ func TestBareYesDoesNotConfirmPendingCart(t *testing.T) {
 	}
 }
 
+func TestConfirmationRecoversAssistantSelectionFromConversation(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "")
+	store := NewCartStore()
+	conversations := NewConversationStore()
+	chatHandler := ChatHandler(testCatalog(), store, nil, conversations)
+	cartHandler := CartHandler(testCatalog(), store)
+	initial := doJSONRequest(cartHandler, http.MethodGet, "/api/cart", nil, nil)
+	cookie := sessionCookie(t, initial)
+
+	product := testCatalog().Products[0]
+	conversations.append(cookie.Value, "Мне нужен этот товар", "Я зафиксировал ваш выбор: **"+product.Name+"** — 2 шт. Пожалуйста, подтвердите ваш заказ.", []models.Product{product})
+	response := doJSONRequest(chatHandler, http.MethodPost, "/api/chat", []byte(`{"message":"да, добавь"}`), cookie)
+	var chat models.ChatResponse
+	if err := json.NewDecoder(response.Body).Decode(&chat); err != nil {
+		t.Fatal(err)
+	}
+	if chat.CartAction == nil || chat.CartAction.Article != product.Article || chat.CartAction.Quantity != 2 {
+		t.Fatalf("expected recovered pending order, got %+v (%s)", chat.CartAction, chat.Reply)
+	}
+	if chat.Cart == nil || chat.Cart.Count != 2 {
+		t.Fatalf("expected recovered order in cart, got %+v", chat.Cart)
+	}
+}
+
+func TestConfirmationRecoversMultipleSelectionsAndSkipsPreorder(t *testing.T) {
+	store := NewCartStore()
+	conversations := NewConversationStore()
+	chatHandler := ChatHandler(testCatalog(), store, nil, conversations)
+	cartHandler := CartHandler(testCatalog(), store)
+	initial := doJSONRequest(cartHandler, http.MethodGet, "/api/cart", nil, nil)
+	cookie := sessionCookie(t, initial)
+
+	first := testCatalog().Products[0]
+	second := models.Product{
+		ID:           2,
+		Name:         "РВ-4-КБ Рамка 4местн. верт. КВАРТА (белый) IEK",
+		Article:      "FRAME-4",
+		Price:        100,
+		Availability: "Под заказ",
+	}
+	conversations.append(cookie.Value, "Мне нужны оба товара", "Я зафиксировал ваш выбор:\n1. **"+first.Name+"** — 1 шт.\n2. **"+second.Name+"** — 100 шт. (под заказ)\n\nПожалуйста, подтвердите ваш заказ.", []models.Product{first, second})
+
+	response := doJSONRequest(chatHandler, http.MethodPost, "/api/chat", []byte(`{"message":"да добавь"}`), cookie)
+	var chat models.ChatResponse
+	if err := json.NewDecoder(response.Body).Decode(&chat); err != nil {
+		t.Fatal(err)
+	}
+	if len(chat.CartActions) != 1 || chat.CartActions[0].Article != first.Article || chat.CartActions[0].Quantity != 1 {
+		t.Fatalf("expected only available selection to be added, got %+v (%s)", chat.CartActions, chat.Reply)
+	}
+	if chat.Cart == nil || chat.Cart.Count != 1 || !strings.Contains(chat.Reply, "Не добавлено") {
+		t.Fatalf("expected partial order result, got cart=%+v reply=%s", chat.Cart, chat.Reply)
+	}
+}
 
 func TestFindAnalogsForUnavailableProduct(t *testing.T) {
 	target := models.Product{
@@ -245,11 +297,11 @@ func TestDemoChatSuggestsAnalogForUnavailableProduct(t *testing.T) {
 		},
 	}
 	analog := models.Product{
-		ID:                 11,
-		Name:               "Автоматический выключатель Schneider 3P 80A",
-		Article:            "ALT-80A",
-		Availability:       "В наличии",
-		StockQuantity:      6,
+		ID:            11,
+		Name:          "Автоматический выключатель Schneider 3P 80A",
+		Article:       "ALT-80A",
+		Availability:  "В наличии",
+		StockQuantity: 6,
 		Properties: map[string]string{
 			"Полюсов": "3",
 			"Ток":     "80 A",
@@ -273,7 +325,6 @@ func TestDemoChatSuggestsAnalogForUnavailableProduct(t *testing.T) {
 		t.Fatalf("expected analog explanation in reply, got %q", chat.Reply)
 	}
 }
-
 
 func TestEKTArticleWithoutTrailingUnderscoreResolvesToProduct(t *testing.T) {
 	catalog := &models.Catalog{Products: []models.Product{{

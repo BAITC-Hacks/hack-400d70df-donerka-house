@@ -12,6 +12,12 @@ const maxConversationMessages = 12
 type pendingPurchase struct {
 	Product  models.Product
 	Quantity int
+	Items    []pendingLine
+}
+
+type pendingLine struct {
+	Product  models.Product
+	Quantity int
 }
 
 type conversation struct {
@@ -58,12 +64,23 @@ func (s *ConversationStore) append(sessionID string, userMessage, assistantMessa
 	s.conversations[sessionID] = entry
 }
 
-
 func (s *ConversationStore) setPending(sessionID string, product models.Product, quantity int) {
+	s.setPendingOrder(sessionID, []pendingLine{{Product: product, Quantity: quantity}})
+}
+
+func (s *ConversationStore) setPendingOrder(sessionID string, lines []pendingLine) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	entry := s.conversations[sessionID]
-	entry.pending = &pendingPurchase{Product: product, Quantity: quantity}
+	if len(lines) == 0 {
+		entry.pending = nil
+	} else {
+		entry.pending = &pendingPurchase{
+			Product:  lines[0].Product,
+			Quantity: lines[0].Quantity,
+			Items:    append([]pendingLine(nil), lines...),
+		}
+	}
 	s.conversations[sessionID] = entry
 }
 
@@ -75,6 +92,7 @@ func (s *ConversationStore) getPending(sessionID string) *pendingPurchase {
 		return nil
 	}
 	copyPending := *entry.pending
+	copyPending.Items = append([]pendingLine(nil), entry.pending.Items...)
 	return &copyPending
 }
 

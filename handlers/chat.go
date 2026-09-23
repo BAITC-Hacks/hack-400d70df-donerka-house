@@ -599,6 +599,79 @@ func appendAnalogFacts(reply string, target *models.Product, analogs []models.Pr
 	}
 	return strings.TrimSpace(reply) + "\n\nПодходящие аналоги: " + strings.Join(lines, "; ") + "."
 }
+
+// restorePendingPurchase recovers a selection that was described by the
+// assistant but not stored in pending state. This can happen when the server
+// restarts between the selection message and "да, добавь", or when the model
+// summarizes a multi-item selection itself. Articles and names are still
+// matched against validated recent catalog products; no client-provided item
+// is trusted directly.
+func restorePendingPurchase(history []openai.ChatCompletionMessage, products []models.Product) *pendingPurchase {
+	if len(products) == 0 || len(history) == 0 {
+		return nil
+	}
+	selectionText := ""
+	for index := len(history) - 1; index >= 0; index-- {
+		if history[index].Role == openai.ChatMessageRoleAssistant {
+			selectionText = history[index].Content
+			break
+		}
+	}
+	if selectionText == "" {
+		return nil
+	}
+	lowerSelection := strings.ToLower(selectionText)
+	if analogIndex := strings.Index(lowerSelection, "подходящие аналоги"); analogIndex >= 0 {
+		selectionText = selectionText[:analogIndex]
+	}
+	lowerSelection = strings.ToLower(selectionText)
+
+	lines := make([]pendingLine, 0, len(products))
+	for _, product := range products {
+		mentioned := strings.Contains(lowerSelection, strings.ToLower(product.Name))
+		if !mentioned && product.Article != "" {
+			mentioned = strings.Contains(normalizeReference(lowerSelection), normalizeReference(product.Article))
+		}
+		if !mentioned && len(products) == 1 {
+			mentioned = true
+		}
+		if !mentioned {
+			continue
+		}
+		lines = append(lines, pendingLine{Product: product, Quantity: quantityNearProduct(selectionText, product)})
+	}
+	if len(lines) == 0 {
+		return nil
+	}
+	return &pendingPurchase{Product: lines[0].Product, Quantity: lines[0].Quantity, Items: lines}
+}
+
+func quantityNearProduct(text string, product models.Product) int {
+	lowerText := strings.ToLower(text)
+	markers := []string{strings.ToLower(product.Name), strings.ToLower(product.Article)}
+	for _, marker := range markers {
+		if marker == "" {
+			continue
+		}
+		index := strings.Index(lowerText, marker)
+		if index < 0 {
+			continue
+		}
+		tail := text[index+len(marker):]
+		if len(tail) > 160 {
+			tail = tail[:160]
+		}
+		match := regexp.MustCompile(`(?i)(?:—|–|-|:|=|\*)?\s*(\d{1,4})\s*(?:шт\.?|штук(?:и)?|pcs)`).FindStringSubmatch(tail)
+		if len(match) == 2 {
+			quantity, err := strconv.Atoi(match[1])
+			if err == nil && quantity > 0 {
+				return quantity
+			}
+		}
+	}
+	return 1
+}
+
 // ChatHandler keeps the original anonymous-session behavior for tests and
 // deployments that do not configure local accounts.
 func ChatHandler(catalog *models.Catalog, store *CartStore, live *LiveCatalog, conversations *ConversationStore, ektAPIs ...*EKTAPI) http.HandlerFunc {
@@ -648,26 +721,64 @@ func ChatHandlerWithAuth(catalog *models.Catalog, store *CartStore, live *LiveCa
 		if isExplicitConfirmation(req.Message) {
 			pending := conversations.getPending(cartKey)
 			if pending == nil {
+				history, recentProducts := conversations.get(cartKey)
+				pending = restorePendingPurchase(history, recentProducts)
+				if pending != nil {
+					conversations.setPendingOrder(cartKey, pending.Items)
+				}
+			}
+			if pending == nil {
 				writeJSON(w, models.ChatResponse{Reply: "Сначала выберите товар и количество, затем я попрошу подтверждение."})
 				return
 			}
-			product := pending.Product
-			if latest := findProductByReference(catalog, product.Article); latest != nil {
-				product = *latest
+
+			lines := pending.Items
+			if len(lines) == 0 {
+				lines = []pendingLine{{Product: pending.Product, Quantity: pending.Quantity}}
 			}
-			if message := validateCartQuantity(store, cartKey, product, pending.Quantity); message != "" {
-				conversations.clearPending(cartKey)
-				analogs := findAnalogs(catalog, product, 3)
-				reply := appendAnalogFacts(message, &product, analogs)
-				writeJSON(w, models.ChatResponse{Reply: reply, Analogs: productResultsFromProducts(analogs)})
+			actions := make([]models.CartAction, 0, len(lines))
+			addedProducts := make([]models.Product, 0, len(lines))
+			skipped := make([]string, 0)
+			allAnalogs := make([]models.Product, 0)
+			for _, line := range lines {
+				product := line.Product
+				if latest := findProductByReference(catalog, product.Article); latest != nil {
+					product = *latest
+				}
+				if message := validateCartQuantity(store, cartKey, product, line.Quantity); message != "" {
+					skipped = append(skipped, fmt.Sprintf("«%s» — %s", product.Name, message))
+					allAnalogs = append(allAnalogs, findAnalogs(catalog, product, 3)...)
+					continue
+				}
+				store.add(cartKey, product, line.Quantity)
+				actions = append(actions, *cartAction(&product, line.Quantity))
+				addedProducts = append(addedProducts, product)
+			}
+			conversations.clearPending(cartKey)
+			if len(actions) == 0 {
+				reply := "Не удалось добавить выбранные товары.\n\n" + strings.Join(skipped, "\n")
+				reply = appendAnalogFacts(reply, nil, uniqueProducts(allAnalogs))
+				writeJSON(w, models.ChatResponse{Reply: reply, Analogs: productResultsFromProducts(uniqueProducts(allAnalogs))})
 				return
 			}
-			cart := store.add(cartKey, product, pending.Quantity)
-			action := cartAction(&product, pending.Quantity)
-			conversations.clearPending(cartKey)
-			reply := fmt.Sprintf("✅ Добавлено: «%s» — %d шт. Открыть актуальную корзину: /#cart", product.Name, pending.Quantity)
-			conversations.append(cartKey, req.Message, reply, []models.Product{product})
-			writeJSON(w, models.ChatResponse{Reply: reply, CartAction: action, Cart: &cart, CartURL: "/#cart"})
+			addedParts := make([]string, 0, len(actions))
+			for _, action := range actions {
+				addedParts = append(addedParts, fmt.Sprintf("«%s» — %d шт", action.Name, action.Quantity))
+			}
+			reply := "✅ Добавлено: " + strings.Join(addedParts, "; ") + ". Открыть актуальную корзину: /#cart"
+			if len(skipped) > 0 {
+				reply += "\n\nНе добавлено:\n" + strings.Join(skipped, "\n")
+			}
+			cart := store.snapshot(cartKey)
+			conversations.append(cartKey, req.Message, reply, addedProducts)
+			response := models.ChatResponse{Reply: reply, Cart: &cart, CartActions: actions, CartURL: "/#cart"}
+			if len(actions) > 0 {
+				response.CartAction = &actions[0]
+			}
+			if len(allAnalogs) > 0 {
+				response.Analogs = productResultsFromProducts(uniqueProducts(allAnalogs))
+			}
+			writeJSON(w, response)
 			return
 		}
 
