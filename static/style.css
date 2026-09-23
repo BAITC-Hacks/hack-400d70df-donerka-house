@@ -244,6 +244,7 @@ button { font-family: inherit; cursor: pointer; }
 .chat-widget {
   position: fixed; bottom: 104px; right: 28px; z-index: 999;
   width: 370px; max-width: calc(100vw - 36px);
+  max-height: calc(100dvh - 120px);
   background: #fff; border-radius: 18px;
   box-shadow: 0 20px 60px rgba(0,0,0,.18);
   display: none; flex-direction: column;
@@ -384,6 +385,7 @@ button { font-family: inherit; cursor: pointer; }
 .chat-product-stock.is-preorder { color: #a16207; }
 .chat-product-footer {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   margin-top: auto;
@@ -416,7 +418,9 @@ button { font-family: inherit; cursor: pointer; }
 /* ===== RESPONSIVE ===== */
 @media (max-width: 900px) {
   .header-inner { flex-wrap: wrap; }
-  .header-contacts { display: none; }
+  .header-contacts { display: flex; margin-left: auto; }
+  .phone-block { display: none; }
+  .search-bar { order: 3; flex-basis: 100%; }
   .hero .container { flex-direction: column; }
   .hero-visual { display: none; }
   .hero-stats { gap: 16px; }
@@ -426,9 +430,24 @@ button { font-family: inherit; cursor: pointer; }
   .topbar-links a { display: none; }
   .topbar-links .account-link { display: block; }
   .section-title { font-size: 1.4rem; }
-  .chat-widget { right: 12px; bottom: 84px; width: calc(100vw - 24px); }
+  .chat-widget { right: 12px; bottom: 84px; width: calc(100vw - 24px); max-height: calc(100dvh - 100px); }
+  .chat-messages { min-height: 70px; }
   .chat-bubble { right: 14px; bottom: 20px; width: 54px; height: 54px; font-size: 1.4rem; }
   .cat-nav .container { overflow-x: auto; padding-bottom: 2px; }
-  .cart-panel { top: 74px; right: 12px; }
+  .cart-panel { top: 74px; right: 12px; max-height: calc(100dvh - 86px); overflow-y: auto; }
   .auth-dialog { padding: 25px 20px; }
 }
+
+.privacy-note { font-size: .72rem; line-height: 1.4; padding: 7px 14px; color: var(--text-muted); }
+.chat-header, .chat-input-row, .chat-chips, .privacy-note, .chat-messages > * { flex-shrink: 0; }
+.chat-input { min-width: 0; }
+.privacy-note a { text-decoration: underline; }
+.auth-consent { display: flex; align-items: flex-start; gap: 8px; font-size: .8rem; margin-top: 12px; }
+.auth-dialog { max-height: calc(100dvh - 40px); overflow-y: auto; }
+.snapshot-label { display: block; color: var(--text-muted); font-size: .65rem; font-weight: 400; }
+.chat-product-meta { font-size: .75rem; color: var(--text-muted); line-height: 1.4; margin: 7px 0; }
+.confirm-add-btn { align-self: flex-start; min-height: 44px; }
+.confirm-add-btn:disabled { opacity: .5; }
+.cart-remove-btn, .cart-close-btn, .chat-close-btn, .chat-send-btn { min-width: 44px; min-height: 44px; }
+.privacy-page { max-width: 760px; margin: 40px auto; padding: 20px; }
+.privacy-page p { margin: 16px 0; }

@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/BAITC-Hacks/hack-400d70df-donerka-house/models"
 )
@@ -22,12 +23,14 @@ const (
 // in-memory for this demo; a production deployment should replace it with a
 // database or Redis-backed store.
 type CartStore struct {
-	mu    sync.RWMutex
-	carts map[string]map[string]models.CartItem
+	mu       sync.RWMutex
+	carts    map[string]map[string]models.CartItem
+	sessions map[string]time.Time
+	removals map[string]removalConfirmation
 }
 
 func NewCartStore() *CartStore {
-	return &CartStore{carts: make(map[string]map[string]models.CartItem)}
+	return &CartStore{carts: make(map[string]map[string]models.CartItem), sessions: make(map[string]time.Time), removals: make(map[string]removalConfirmation)}
 }
 
 func newSessionID() (string, error) {
@@ -39,7 +42,7 @@ func newSessionID() (string, error) {
 }
 
 func (s *CartStore) sessionID(w http.ResponseWriter, r *http.Request) (string, error) {
-	if cookie, err := r.Cookie(sessionCookieName); err == nil && cookie.Value != "" {
+	if cookie, err := r.Cookie(sessionCookieName); err == nil && s.validSession(cookie.Value) {
 		return cookie.Value, nil
 	}
 
@@ -47,14 +50,17 @@ func (s *CartStore) sessionID(w http.ResponseWriter, r *http.Request) (string, e
 	if err != nil {
 		return "", err
 	}
+	s.mu.Lock()
+	s.sessions[id] = time.Now().Add(24 * time.Hour)
+	s.mu.Unlock()
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
 		Value:    id,
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   r.TLS != nil,
-		MaxAge:   60 * 60 * 24 * 30,
+		Secure:   secureCookie(r),
+		MaxAge:   60 * 60 * 24,
 	})
 	return id, nil
 }
@@ -104,9 +110,6 @@ func (s *CartStore) keyForRequest(w http.ResponseWriter, r *http.Request, auth *
 		return sessionID, nil
 	}
 	if user := auth.User(r); user != nil {
-		if err := s.MergeSessionIntoUser(w, r, user.ID); err != nil {
-			return "", err
-		}
 		return accountCartKey(user.ID), nil
 	}
 	return sessionID, nil
@@ -140,18 +143,24 @@ func (s *CartStore) currentQuantity(cartKey, article string) int {
 }
 
 func validateCartQuantity(store *CartStore, cartKey string, product models.Product, quantity int) string {
+	return validateQuantity(product, quantity, store.currentQuantity(cartKey, product.Article))
+}
+
+func validateQuantity(product models.Product, quantity, current int) string {
 	if quantity < 1 || quantity > maxCartQuantity {
 		return "Количество должно быть от 1 до 999."
 	}
 	if strings.EqualFold(product.Availability, "Под заказ") || strings.EqualFold(product.Availability, "Нет в наличии") {
 		return "Товар сейчас недоступен для добавления в корзину."
 	}
+	if product.Price <= 0 || product.Availability != "В наличии" || product.StockQuantity <= 0 && product.TotalStockQuantity <= 0 {
+		return "Цена или доступный остаток не подтверждены. Добавление недоступно до проверки данных EKT."
+	}
 	limit := product.StockQuantity
 	if limit <= 0 && product.TotalStockQuantity > 0 {
 		limit = product.TotalStockQuantity
 	}
 	if limit > 0 {
-		current := store.currentQuantity(cartKey, product.Article)
 		if current+quantity > limit {
 			return fmt.Sprintf("Доступно только %d шт. товара «%s». В корзине уже %d шт.", limit, product.Name, current)
 		}
@@ -208,8 +217,14 @@ func CartHandlerWithAuth(catalog *models.Catalog, store *CartStore, auth *AuthSt
 		case http.MethodPost:
 			writeJSONError(w, http.StatusConflict, "Добавление в корзину доступно только через подтверждённый сценарий чата: выберите товар и количество, затем отправьте «да, добавь».")
 		case http.MethodDelete:
-			article := strings.TrimSpace(r.URL.Query().Get("article"))
-			writeJSON(w, store.remove(cartKey, article))
+			var request struct {
+				Token string `json:"confirmation_token"`
+			}
+			if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2048)).Decode(&request); err != nil || !store.confirmRemoval(cartKey, request.Token) {
+				writeJSONError(w, http.StatusConflict, "Сначала подтвердите удаление выбранного товара или очистку корзины.")
+				return
+			}
+			writeJSON(w, store.snapshot(cartKey))
 		default:
 			writeJSONError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		}

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/BAITC-Hacks/hack-400d70df-donerka-house/models"
 )
@@ -19,6 +20,7 @@ func testCatalog() *models.Catalog {
 		Price:         64920,
 		Availability:  "В наличии",
 		StockQuantity: 5,
+		VerifiedAt:    time.Now(),
 	}}}
 }
 
@@ -189,7 +191,7 @@ func TestBareYesDoesNotConfirmPendingCart(t *testing.T) {
 	}
 }
 
-func TestConfirmationRecoversAssistantSelectionFromConversation(t *testing.T) {
+func TestModelProseCannotAuthorizeCartChanges(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "")
 	store := NewCartStore()
 	conversations := NewConversationStore()
@@ -205,15 +207,12 @@ func TestConfirmationRecoversAssistantSelectionFromConversation(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&chat); err != nil {
 		t.Fatal(err)
 	}
-	if chat.CartAction == nil || chat.CartAction.Article != product.Article || chat.CartAction.Quantity != 2 {
-		t.Fatalf("expected recovered pending order, got %+v (%s)", chat.CartAction, chat.Reply)
-	}
-	if chat.Cart == nil || chat.Cart.Count != 2 {
-		t.Fatalf("expected recovered order in cart, got %+v", chat.Cart)
+	if chat.CartAction != nil || store.snapshot(cookie.Value).Count != 0 {
+		t.Fatalf("model prose must not authorize a mutation: %+v", chat)
 	}
 }
 
-func TestConfirmationRecoversMultipleSelectionsAndSkipsPreorder(t *testing.T) {
+func TestConfirmedServerSelectionSkipsUnavailableItems(t *testing.T) {
 	store := NewCartStore()
 	conversations := NewConversationStore()
 	chatHandler := ChatHandler(testCatalog(), store, nil, conversations)
@@ -228,8 +227,10 @@ func TestConfirmationRecoversMultipleSelectionsAndSkipsPreorder(t *testing.T) {
 		Article:      "FRAME-4",
 		Price:        100,
 		Availability: "Под заказ",
+		VerifiedAt:   time.Now(),
 	}
 	conversations.append(cookie.Value, "Мне нужны оба товара", "Я зафиксировал ваш выбор:\n1. **"+first.Name+"** — 1 шт.\n2. **"+second.Name+"** — 100 шт. (под заказ)\n\nПожалуйста, подтвердите ваш заказ.", []models.Product{first, second})
+	conversations.setPendingOrder(cookie.Value, []pendingLine{{Product: first, Quantity: 1}, {Product: second, Quantity: 100}})
 
 	response := doJSONRequest(chatHandler, http.MethodPost, "/api/chat", []byte(`{"message":"да добавь"}`), cookie)
 	var chat models.ChatResponse

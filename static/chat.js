@@ -9,6 +9,29 @@ let chipsHidden = false;
 let cart = [];
 let authMode = 'login';
 
+let sessionPromise;
+async function sessionToken() {
+ if (!sessionPromise) sessionPromise = fetch('/api/session').then(async res => {
+  if (!res.ok) throw new Error('Session unavailable');
+  return (await res.json()).csrf_token;
+ }).catch(error => { sessionPromise = null; throw error; });
+ return sessionPromise;
+}
+async function apiFetch(url, options = {}) {
+ const token = await sessionToken();
+ const method = options.method || 'GET';
+ const headers = {...options.headers};
+ if (!['GET', 'HEAD'].includes(method)) {
+  headers['X-CSRF-Token'] = token;
+  headers['Content-Type'] = 'application/json';
+  if (!options.body) options.body = '{}';
+ }
+ return fetch(url, {...options, headers, credentials: 'same-origin'});
+}
+
+const paymentDataPattern = /(?:\d[ \t-]*){13,19}|\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b|(?:cvv|cvc|пин|pin|otp|смс|sms|код.{0,12}(?:банк|подтверж)|срок.{0,12}(?:карт|действ))\s*[:=-]?\s*\d{2,8}/i;
+const paymentPrivacyReply = 'Не отправляйте номер карты, срок действия, CVV/CVC, PIN и коды SMS. Сообщение с распознаваемыми платёжными данными не отправлено. Оплата — только на защищённой странице EKT.';
+
 function safeURL(value) {
   try {
     const url = new URL(value || '#', window.location.origin);
@@ -55,7 +78,11 @@ function hideChips() {
   }
 }
 
-async function sendText(text) {
+async function sendText(text, confirmationToken = '') {
+ if (paymentDataPattern.test(text)) {
+  document.getElementById('chatInput').value = '';
+  appendMsg(paymentPrivacyReply, 'bot'); scrollBottom(); return;
+ }
   if (isBusy) return;
   isBusy = true;
   document.getElementById('chatSendBtn').disabled = true;
@@ -65,10 +92,10 @@ async function sendText(text) {
   scrollBottom();
 
   try {
-    const res = await fetch(API_CHAT, {
+    const res = await apiFetch(API_CHAT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: text }),
+      body: JSON.stringify({ message: text, confirmation_token: confirmationToken }),
     });
 
     removeTyping(typingId);
@@ -79,6 +106,14 @@ async function sendText(text) {
     } else {
       const data = await res.json();
       appendMsg(data.reply || '...', 'bot');
+      document.querySelectorAll('.confirm-add-btn').forEach(button => { button.disabled = true; });
+      if (data.confirmation_token) {
+       const button = document.createElement('button');
+       button.className = 'chat-add-btn confirm-add-btn';
+       button.textContent = 'Подтверждаю добавление';
+       button.addEventListener('click', () => { if (!isBusy) sendText('да, добавь', data.confirmation_token); });
+       document.getElementById('chatMessages').appendChild(button);
+      }
 
       if (data.products && data.products.length > 0) {
         appendProductCards(data.products);
@@ -96,7 +131,7 @@ async function sendText(text) {
         applyCart(data.cart);
       } else if (data.cart_action) {
         // Backward-compatible fallback for an older backend response.
-        await addToCart(data.cart_action, false);
+        await loadCart();
       }
       if (data.cart_action) {
         showToast(`✅ ${data.cart_action.name} (x${data.cart_action.quantity}) добавлен в корзину!`);
@@ -117,7 +152,7 @@ async function sendText(text) {
 
 async function loadCart() {
   try {
-    const res = await fetch(API_CART);
+    const res = await apiFetch(API_CART);
     if (res.ok) applyCart(await res.json());
   } catch {
     showToast('⚠️ Не удалось загрузить корзину');
@@ -128,7 +163,7 @@ async function loadCart() {
 
 async function loadAuth() {
   try {
-    const res = await fetch(API_AUTH);
+    const res = await apiFetch(API_AUTH);
     if (res.ok) applyAuthState(await res.json());
   } catch {
     // The basket remains usable as a guest cart if the account endpoint is unavailable.
@@ -168,6 +203,7 @@ function toggleAuthMode() {
 
 async function submitAuth(event) {
   event.preventDefault();
+  if (isBusy) { showToast('Дождитесь ответа перед сменой аккаунта.'); return; }
   const submit = document.getElementById('authSubmit');
   const error = document.getElementById('authError');
   const payload = {
@@ -175,11 +211,12 @@ async function submitAuth(event) {
     email: document.getElementById('authEmail').value.trim(),
     password: document.getElementById('authPassword').value,
     name: document.getElementById('authName').value.trim(),
+    merge_cart: document.getElementById('mergeCartConsent').checked,
   };
   error.textContent = '';
   submit.disabled = true;
   try {
-    const res = await fetch(API_AUTH, {
+    const res = await apiFetch(API_AUTH, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -190,6 +227,7 @@ async function submitAuth(event) {
       return;
     }
     applyAuthState(data);
+    resetChatView();
     document.getElementById('authPassword').value = '';
     closeAuthModal();
     await loadCart();
@@ -202,10 +240,12 @@ async function submitAuth(event) {
 }
 
 async function logoutAccount() {
+  if (isBusy) { showToast('Дождитесь ответа перед выходом.'); return; }
   try {
-    const res = await fetch(API_AUTH, { method: 'DELETE' });
+    const res = await apiFetch(API_AUTH, { method: 'DELETE' });
     if (!res.ok) throw new Error('logout failed');
     applyAuthState({ authenticated: false });
+    resetChatView();
     closeAuthModal();
     await loadCart();
     showToast('Вы вышли из аккаунта');
@@ -238,43 +278,37 @@ function applyCart(data) {
   renderCartPanel();
 }
 
-async function addToCart(action, notify = true) {
-  try {
-    const res = await fetch(API_CART, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ article: action.article, quantity: action.quantity }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      showToast('⚠️ ' + (data.error || 'Не удалось добавить товар'));
-      return false;
-    }
-    applyCart(data);
-    if (notify) showToast(`✅ ${action.name} (x${action.quantity}) добавлен в корзину!`);
-    return true;
-  } catch {
-    showToast('⚠️ Нет соединения с сервером');
-    return false;
-  }
+async function confirmCartRemoval(action, article = '') {
+ try {
+  const proposal = await apiFetch('/api/cart/confirmation', {
+   method: 'POST', body: JSON.stringify({action, article})
+  });
+  const data = await proposal.json();
+  if (!proposal.ok) throw new Error(data.error || 'Не удалось подготовить изменение');
+  if (!window.confirm(data.summary)) return;
+  const response = await apiFetch(API_CART, {
+   method: 'DELETE', body: JSON.stringify({confirmation_token: data.confirmation_token})
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || 'Корзина изменилась; подтвердите действие заново');
+  applyCart(result);
+ } catch (error) { showToast('⚠️ ' + error.message); }
 }
+async function removeCartItem(article) { await confirmCartRemoval('remove', article); }
+async function clearCart() { await confirmCartRemoval('clear'); }
 
-async function removeCartItem(article) {
-  try {
-    const res = await fetch(`${API_CART}?article=${encodeURIComponent(article)}`, { method: 'DELETE' });
-    if (res.ok) applyCart(await res.json());
-  } catch {
-    showToast('⚠️ Не удалось изменить корзину');
-  }
+async function clearChat() {
+ if (isBusy) { showToast('Дождитесь ответа, затем очистите историю.'); return; }
+ if (!window.confirm('Удалить историю чата и отменить ожидающее подтверждение?')) return;
+ try {
+  const response = await apiFetch(API_CHAT, {method:'DELETE'});
+  if (!response.ok) throw new Error('Не удалось очистить историю');
+  resetChatView();
+ } catch (error) { showToast(error.message); }
 }
-
-async function clearCart() {
-  try {
-    const res = await fetch(API_CART, { method: 'DELETE' });
-    if (res.ok) applyCart(await res.json());
-  } catch {
-    showToast('⚠️ Не удалось очистить корзину');
-  }
+function resetChatView() {
+ document.getElementById('chatMessages').textContent = '';
+ appendMsg('Помогу выбрать товар. Не отправляйте платёжные данные. Изменения корзины требуют вашего подтверждения.', 'bot');
 }
 
 function toggleCart() {
@@ -441,7 +475,8 @@ function appendProductCards(products, title = '') {
     const name = document.createElement('div');
     name.className = 'chat-product-name';
     name.textContent = product.name || 'Товар';
-    if (product.availability) {
+    const verified = product.verified_at && Date.now() - Date.parse(product.verified_at) < 5 * 60 * 1000;
+    if (verified && product.availability) {
       const stock = document.createElement('div');
       stock.className = 'chat-product-stock ' + (product.availability === 'В наличии' ? 'is-available' : 'is-preorder');
       stock.textContent = product.availability;
@@ -459,7 +494,7 @@ function appendProductCards(products, title = '') {
     footer.className = 'chat-product-footer';
     const price = document.createElement('span');
     price.className = 'chat-product-price';
-    price.textContent = product.price ? product.price.toLocaleString('ru-KZ') + ' тг' : 'По запросу';
+    price.textContent = verified && product.price ? product.price.toLocaleString('ru-KZ') + ' тг' : 'Цена требует проверки';
     const link = document.createElement('a');
     link.className = 'chat-product-link';
     link.textContent = 'Подробнее →';
@@ -477,6 +512,16 @@ function appendProductCards(products, title = '') {
 
     footer.append(price, link, addButton);
     info.append(article, name);
+    const provenance = document.createElement('div');
+    provenance.className = 'chat-product-meta';
+    provenance.textContent = verified ? 'Данные EKT проверены ' + new Date(product.verified_at).toLocaleTimeString('ru-RU') : 'Актуальное наличие требует проверки';
+    info.appendChild(provenance);
+    if (product.recommendation_reason) {
+     const reason = document.createElement('p');
+     reason.className = 'chat-product-meta';
+     reason.textContent = 'Почему предложен: ' + product.recommendation_reason;
+     info.appendChild(reason);
+    }
 
     if (Array.isArray(product.certificates) && product.certificates.length > 0) {
       const certs = document.createElement('div');
@@ -530,7 +575,10 @@ function now() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  loadAuth();
+  document.getElementById('cartButton').addEventListener('keydown', event => {
+    if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleCart(); }
+  });
+  await loadAuth();
   await loadCart();
   if (window.location.hash === '#cart') {
     const panel = document.getElementById('cartPanel');
@@ -544,7 +592,7 @@ document.addEventListener('click', event => {
   const cartPanel = document.getElementById('cartPanel');
   const cartButton = document.getElementById('cartButton');
   const authModal = document.getElementById('authModal');
-  if (isOpen && widget && bubble && !widget.contains(event.target) && !bubble.contains(event.target)) {
+  if (isOpen && widget && bubble && !widget.contains(event.target) && !bubble.contains(event.target) && !event.target.closest('[data-chat-trigger]')) {
     toggleChat();
   }
   if (cartPanel && cartPanel.classList.contains('open') && !cartPanel.contains(event.target) && !cartButton.contains(event.target)) {

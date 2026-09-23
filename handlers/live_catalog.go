@@ -102,6 +102,9 @@ func (l *LiveCatalog) Enrich(ctx context.Context, products []models.Product) []m
 			continue
 		}
 		parseLiveDetail(&products[i], root)
+		if products[i].Price > 0 && products[i].Availability != "" {
+			products[i].VerifiedAt = time.Now().UTC()
+		}
 		if products[i].StockLocation == "" {
 			products[i].StockLocation = parseLiveCurrentCity(root)
 		}

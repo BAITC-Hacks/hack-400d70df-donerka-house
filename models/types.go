@@ -3,6 +3,7 @@ package models
 import (
 	"strings"
 	"sync"
+	"time"
 )
 
 // Product represents a single product from the catalog
@@ -23,6 +24,7 @@ type Product struct {
 	TotalStockQuantity int               `json:"total_stock_quantity,omitempty"`
 	Stores             []Store           `json:"stores,omitempty"`
 	Certificates       []string          `json:"certificates,omitempty"`
+	VerifiedAt         time.Time         `json:"verified_at,omitempty"`
 }
 
 // ProductsPage represents a paginated list of products
@@ -151,26 +153,29 @@ func (c *Catalog) ProductCount() int {
 
 // ChatRequest is the incoming user message
 type ChatRequest struct {
-	Message string `json:"message"`
+	Message           string `json:"message"`
+	ConfirmationToken string `json:"confirmation_token,omitempty"`
 }
 
 // ProductResult is a matched product returned alongside the AI reply
 type ProductResult struct {
-	ID                 int               `json:"id"`
-	Name               string            `json:"name"`
-	Article            string            `json:"article"`
-	Price              float64           `json:"price"`
-	Image              string            `json:"image"`
-	URL                string            `json:"url"`
-	Description        string            `json:"description,omitempty"`
-	Properties         map[string]string `json:"properties,omitempty"`
-	Source             string            `json:"source,omitempty"`
-	Availability       string            `json:"availability,omitempty"`
-	StockQuantity      int               `json:"stock_quantity,omitempty"`
-	StockLocation      string            `json:"stock_location,omitempty"`
-	TotalStockQuantity int               `json:"total_stock_quantity,omitempty"`
-	Stores             []Store           `json:"stores,omitempty"`
-	Certificates       []string          `json:"certificates,omitempty"`
+	VerifiedAt           time.Time         `json:"verified_at,omitempty"`
+	RecommendationReason string            `json:"recommendation_reason,omitempty"`
+	ID                   int               `json:"id"`
+	Name                 string            `json:"name"`
+	Article              string            `json:"article"`
+	Price                float64           `json:"price"`
+	Image                string            `json:"image"`
+	URL                  string            `json:"url"`
+	Description          string            `json:"description,omitempty"`
+	Properties           map[string]string `json:"properties,omitempty"`
+	Source               string            `json:"source,omitempty"`
+	Availability         string            `json:"availability,omitempty"`
+	StockQuantity        int               `json:"stock_quantity,omitempty"`
+	StockLocation        string            `json:"stock_location,omitempty"`
+	TotalStockQuantity   int               `json:"total_stock_quantity,omitempty"`
+	Stores               []Store           `json:"stores,omitempty"`
+	Certificates         []string          `json:"certificates,omitempty"`
 }
 
 // CartAction represents a directive to the frontend to add an item to the cart
@@ -206,10 +211,11 @@ type User struct {
 
 // AuthRequest is used by the local account API.
 type AuthRequest struct {
-	Action   string `json:"action"`
-	Email    string `json:"email"`
-	Name     string `json:"name"`
-	Password string `json:"password"`
+	MergeCart bool   `json:"merge_cart"`
+	Action    string `json:"action"`
+	Email     string `json:"email"`
+	Name      string `json:"name"`
+	Password  string `json:"password"`
 }
 
 // AuthResponse describes the current local login state.
@@ -226,13 +232,14 @@ type CartRequest struct {
 
 // ChatResponse is the AI reply + optional matched products and cart actions
 type ChatResponse struct {
-	Reply       string          `json:"reply"`
-	Products    []ProductResult `json:"products,omitempty"`
-	Analogs     []ProductResult `json:"analogs,omitempty"`
-	CartAction  *CartAction     `json:"cart_action,omitempty"`
-	CartActions []CartAction    `json:"cart_actions,omitempty"`
-	Cart        *CartResponse   `json:"cart,omitempty"`
-	CartURL     string          `json:"cart_url,omitempty"`
+	ConfirmationToken string          `json:"confirmation_token,omitempty"`
+	Reply             string          `json:"reply"`
+	Products          []ProductResult `json:"products,omitempty"`
+	Analogs           []ProductResult `json:"analogs,omitempty"`
+	CartAction        *CartAction     `json:"cart_action,omitempty"`
+	CartActions       []CartAction    `json:"cart_actions,omitempty"`
+	Cart              *CartResponse   `json:"cart,omitempty"`
+	CartURL           string          `json:"cart_url,omitempty"`
 }
 
 // ErrorResponse is a standard error

@@ -51,7 +51,7 @@ func TestAccountOwnsCartAcrossLogoutAndLogin(t *testing.T) {
 	session := cookieByName(t, guestCart, sessionCookieName)
 	carts.add(session.Value, catalog.Products[0], 2)
 
-	register := requestWithCookies(authHandler, http.MethodPost, "/api/auth", []byte(`{"action":"register","email":"buyer@example.com","name":"Buyer","password":"password123"}`), session)
+	register := requestWithCookies(authHandler, http.MethodPost, "/api/auth", []byte(`{"action":"register","email":"buyer@example.com","name":"Buyer","password":"password123","merge_cart":true}`), session)
 	if register.Code != http.StatusOK {
 		t.Fatalf("register status = %d: %s", register.Code, register.Body.String())
 	}

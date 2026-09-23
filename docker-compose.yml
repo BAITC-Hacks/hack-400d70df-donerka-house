@@ -12,7 +12,9 @@ services:
       - EKT_API_BASE_URL=${EKT_API_BASE_URL:-https://ekt.kz/api}
       - EKT_API_USERNAME=${EKT_API_USERNAME:-}
       - EKT_API_PASSWORD=${EKT_API_PASSWORD:-}
+      - EKT_CATALOG_URL=${EKT_CATALOG_URL:-https://nursultan.ekt.kz}
       - ACCOUNT_STORE_PATH=${ACCOUNT_STORE_PATH:-data/accounts.json}
+      - PUBLIC_ORIGIN=${PUBLIC_ORIGIN:-}
     volumes:
       - ./data:/app/data
     restart: unless-stopped

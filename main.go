@@ -69,21 +69,8 @@ func loadCatalog(api *handlers.EKTAPI) (*models.Catalog, error) {
 		}()
 	}
 
-	log.Printf("📦 Total products in catalog: %d", len(catalog.Products))
+	log.Printf("📦 Total products in catalog: %d", catalog.ProductCount())
 	return catalog, nil
-}
-
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
 }
 
 func main() {
@@ -126,8 +113,10 @@ func main() {
 	mux.Handle("/", http.FileServer(http.Dir("static")))
 
 	// API
+	mux.HandleFunc("/api/session", cartStore.SessionHandler)
+	mux.HandleFunc("/api/cart/confirmation", cartStore.RemovalHandler(accountStore))
 	mux.HandleFunc("/api/catalog", handlers.CatalogHandler(catalog))
-	mux.HandleFunc("/api/auth", handlers.AuthHandler(accountStore, cartStore))
+	mux.HandleFunc("/api/auth", handlers.AuthHandler(accountStore, cartStore, conversationStore))
 	mux.HandleFunc("/api/chat", handlers.ChatHandlerWithAuth(catalog, cartStore, liveCatalog, conversationStore, accountStore, ektAPI))
 	mux.HandleFunc("/api/cart", handlers.CartHandlerWithAuth(catalog, cartStore, accountStore))
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -136,7 +125,15 @@ func main() {
 	})
 
 	log.Printf("🚀 ekt.kz AI Assistant running on http://localhost:%s", port)
-	if err := http.ListenAndServe(":"+port, corsMiddleware(mux)); err != nil {
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			handlers.Cleanup(cartStore, conversationStore, accountStore)
+		}
+	}()
+	server := &http.Server{Addr: ":" + port, Handler: cartStore.BrowserSecurity(mux), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 90 * time.Second, IdleTimeout: 60 * time.Second}
+	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("Server error: %v", err)
 	}
 }

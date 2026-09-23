@@ -155,9 +155,22 @@ func (a *EKTAPI) ProductDetail(ctx context.Context, id int) (models.ProductDetai
 	if id <= 0 {
 		return models.ProductDetail{}, errors.New("invalid EKT product id")
 	}
-	var detail models.ProductDetail
-	if err := a.requestJSON(ctx, "products/detail", url.Values{"id": []string{strconv.Itoa(id)}}, &detail); err != nil {
+	var raw map[string]json.RawMessage
+	if err := a.requestJSON(ctx, "products/detail", url.Values{"id": []string{strconv.Itoa(id)}}, &raw); err != nil {
 		return models.ProductDetail{}, err
+	}
+	for _, field := range []string{"id", "article", "price", "quantity"} {
+		if len(raw[field]) == 0 || string(raw[field]) == "null" {
+			return models.ProductDetail{}, fmt.Errorf("EKT detail missing %s", field)
+		}
+	}
+	encoded, _ := json.Marshal(raw)
+	var detail models.ProductDetail
+	if err := json.Unmarshal(encoded, &detail); err != nil {
+		return detail, err
+	}
+	if detail.ID != id {
+		return detail, errors.New("EKT product identity mismatch")
 	}
 	return detail, nil
 }
@@ -186,6 +199,7 @@ func (a *EKTAPI) Enrich(ctx context.Context, products []models.Product) []models
 }
 
 func applyProductDetail(product *models.Product, detail models.ProductDetail) {
+	product.VerifiedAt = time.Now().UTC()
 	if detail.ID != 0 {
 		product.ID = detail.ID
 	}
@@ -198,9 +212,7 @@ func applyProductDetail(product *models.Product, detail models.ProductDetail) {
 	if detail.Description != "" {
 		product.Description = detail.Description
 	}
-	if detail.Price > 0 {
-		product.Price = detail.Price
-	}
+	product.Price = detail.Price
 	if detail.Image != "" {
 		product.Image = detail.Image
 	}
@@ -208,20 +220,21 @@ func applyProductDetail(product *models.Product, detail models.ProductDetail) {
 		product.URL = detail.URL
 	}
 	product.TotalStockQuantity = detail.Quantity
-	if len(detail.Stores) > 0 {
-		product.Stores = append([]models.Store(nil), detail.Stores...)
-	}
+	product.StockQuantity, product.StockLocation = 0, ""
+	product.Stores = append([]models.Store(nil), detail.Stores...)
 	if len(detail.Certificates) > 0 {
 		product.Certificates = append([]string(nil), detail.Certificates...)
 	}
 	if detail.Quantity > 0 {
 		product.Availability = "В наличии"
-	} else if product.Availability == "" {
+	} else {
 		product.Availability = "Нет в наличии"
 	}
-	if product.Properties == nil {
-		product.Properties = make(map[string]string)
+	properties := make(map[string]string)
+	for key, value := range product.Properties {
+		properties[key] = value
 	}
+	product.Properties = properties
 	for name, value := range detail.Properties {
 		product.Properties[name] = stringifyProperty(value)
 	}

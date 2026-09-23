@@ -74,7 +74,7 @@
       <div id="authGuestView">
         <div class="auth-eyebrow">Аккаунт помощника</div>
         <h2 id="authTitle">Вход в аккаунт</h2>
-        <p class="auth-subtitle">После входа корзина будет сохранена за вашим аккаунтом на localhost.</p>
+        <p class="auth-subtitle">Корзина будет привязана к аккаунту на этом сайте.</p>
         <form id="authForm" onsubmit="submitAuth(event)">
           <label class="auth-label" for="authEmail">Email</label>
           <input class="auth-input" id="authEmail" type="email" autocomplete="email" required placeholder="you@example.com" />
@@ -85,6 +85,8 @@
           <label class="auth-label" for="authPassword">Пароль</label>
           <input class="auth-input" id="authPassword" type="password" autocomplete="current-password" minlength="8" required placeholder="Минимум 8 символов" />
           <div class="auth-error" id="authError" role="alert"></div>
+          <label class="auth-consent"><input type="checkbox" id="mergeCartConsent" /> Перенести товары из гостевой корзины в мой аккаунт при входе</label>
+          <p class="privacy-note">Email используется для входа. <a href="/privacy.html" target="_blank" rel="noopener">Как обрабатываются данные</a></p>
           <button class="btn btn-primary auth-submit" id="authSubmit" type="submit">Войти</button>
         </form>
         <button class="auth-mode-toggle" id="authModeToggle" type="button" onclick="toggleAuthMode()">Создать новый аккаунт</button>
@@ -134,15 +136,15 @@
       <div class="hero-content">
         <div class="hero-badge">⚡ AI-Ассистент теперь доступен</div>
         <h1>ГК Электрокомплект</h1>
-        <p class="hero-desc">Крупнейший поставщик электротехнической продукции в Казахстане. Более 50 000 товаров в наличии.</p>
+        <p class="hero-desc">Электротехническая продукция в Казахстане. Актуальные цены и остатки проверяет ассистент перед добавлением в корзину.</p>
         <div class="hero-stats">
           <div class="stat"><span class="stat-num" id="totalProducts">40+</span><span class="stat-label">товаров в каталоге</span></div>
           <div class="stat"><span class="stat-num">9</span><span class="stat-label">городов Казахстана</span></div>
-          <div class="stat"><span class="stat-num">50K+</span><span class="stat-label">позиций на складе</span></div>
+          <div class="stat"><span class="stat-num">EKT</span><span class="stat-label">данные о товарах</span></div>
         </div>
         <div class="hero-btns">
           <a href="#catalog" class="btn btn-primary">📦 Перейти к каталогу</a>
-          <button class="btn btn-secondary" onclick="openChat()">🤖 Спросить AI-ассистента</button>
+          <button class="btn btn-secondary" data-chat-trigger onclick="openChat()">🤖 Спросить AI-ассистента</button>
         </div>
       </div>
       <div class="hero-visual">
@@ -197,8 +199,8 @@
         </div>
         <div class="feature-card">
           <div class="feature-icon">📦</div>
-          <h3>Огромный склад</h3>
-          <p>50 000+ позиций в наличии, складские запасы во всех 9 городах Казахстана</p>
+          <h3>Проверка наличия</h3>
+          <p>Проверяем цену и остаток выбранного товара по данным EKT перед добавлением в корзину</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">🚚</div>
@@ -208,7 +210,7 @@
         <div class="feature-card">
           <div class="feature-icon">💳</div>
           <h3>Удобная оплата</h3>
-          <p>Онлайн-оплата, рассрочка, банковский перевод. AirbaPay, Cloudpayments</p>
+          <p>Способы оплаты уточняйте на официальном сайте EKT. Чат не принимает платёжные данные</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">🤝</div>
@@ -243,27 +245,27 @@
         </div>
         <div class="office-card">
           <div class="office-city">🏙️ Атырау</div>
-          <div class="office-phone">В наличии</div>
+          <div class="office-phone">Наличие уточняется по товару</div>
         </div>
         <div class="office-card">
           <div class="office-city">🏙️ Тараз</div>
-          <div class="office-phone">В наличии</div>
+          <div class="office-phone">Наличие уточняется по товару</div>
         </div>
         <div class="office-card">
           <div class="office-city">🏙️ Актау</div>
-          <div class="office-phone">В наличии</div>
+          <div class="office-phone">Наличие уточняется по товару</div>
         </div>
         <div class="office-card">
           <div class="office-city">🏙️ Караганда</div>
-          <div class="office-phone">В наличии</div>
+          <div class="office-phone">Наличие уточняется по товару</div>
         </div>
         <div class="office-card">
           <div class="office-city">🏙️ Нур-Султан</div>
-          <div class="office-phone">В наличии</div>
+          <div class="office-phone">Наличие уточняется по товару</div>
         </div>
         <div class="office-card">
           <div class="office-city">🏙️ Талдыкорган</div>
-          <div class="office-phone">В наличии</div>
+          <div class="office-phone">Наличие уточняется по товару</div>
         </div>
       </div>
     </div>
@@ -299,10 +301,11 @@
           <div class="chat-status-dot">● Онлайн</div>
         </div>
       </div>
-      <button class="chat-close-btn" onclick="toggleChat()">✕</button>
+      <button class="chat-close-btn" onclick="clearChat()" aria-label="Очистить историю чата">Очистить</button>
+      <button class="chat-close-btn" onclick="toggleChat()" aria-label="Закрыть чат">✕</button>
     </div>
 
-    <div class="chat-messages" id="chatMessages">
+    <div class="chat-messages" id="chatMessages" aria-live="polite" aria-relevant="additions">
       <div class="msg bot">
         <div class="msg-bubble">
           Здравствуйте! 👋 Я AI-консультант ГК Электрокомплект.<br/><br/>
@@ -321,6 +324,7 @@
       <button class="chip" onclick="sendChip(this)">Есть ли доставка в мой город?</button>
     </div>
 
+    <p class="privacy-note">Не отправляйте платёжные данные. Сообщения для консультации обрабатывает ИИ. <a href="/privacy.html" target="_blank" rel="noopener">Приватность</a></p>
     <div class="chat-input-row">
       <input id="chatInput" class="chat-input" type="text"
         placeholder="Напишите вопрос о товаре..."
@@ -385,7 +389,7 @@
             <div class="product-article">Арт: ${escapeHTML(p.article || '—')}</div>
             <div class="product-name">${escapeHTML(p.name)}</div>
             <div class="product-footer">
-              <div class="product-price">${p.price ? escapeHTML(p.price.toLocaleString('ru-KZ') + ' тг') : 'По запросу'}</div>
+              <div class="product-price">${p.price ? escapeHTML(p.price.toLocaleString('ru-KZ') + ' тг') : 'По запросу'}<small class="snapshot-label">Цена из каталога; уточните в чате</small></div>
               <a href="${escapeHTML(safeURL(p.url))}" target="_blank" rel="noopener noreferrer" class="product-btn">Подробнее →</a>
             </div>
           </div>

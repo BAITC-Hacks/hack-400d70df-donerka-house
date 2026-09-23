@@ -5,3 +5,5 @@
 donerka-server
 vendor/
 node_modules/
+data/accounts.json
+data/accounts.json.tmp

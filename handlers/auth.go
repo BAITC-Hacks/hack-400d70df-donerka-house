@@ -43,6 +43,7 @@ type AuthStore struct {
 	mu       sync.RWMutex
 	users    map[string]accountRecord
 	sessions map[string]string
+	expires  map[string]time.Time
 	path     string
 }
 
@@ -53,6 +54,7 @@ func NewAuthStore(path string) (*AuthStore, error) {
 	store := &AuthStore{
 		users:    make(map[string]accountRecord),
 		sessions: make(map[string]string),
+		expires:  make(map[string]time.Time),
 		path:     strings.TrimSpace(path),
 	}
 	if store.path == "" {
@@ -149,6 +151,7 @@ func (s *AuthStore) setSession(w http.ResponseWriter, r *http.Request, userID st
 	}
 	s.mu.Lock()
 	s.sessions[token] = userID
+	s.expires[token] = time.Now().Add(24 * time.Hour)
 	s.mu.Unlock()
 	http.SetCookie(w, &http.Cookie{
 		Name:     authCookieName,
@@ -156,8 +159,8 @@ func (s *AuthStore) setSession(w http.ResponseWriter, r *http.Request, userID st
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   r.TLS != nil,
-		MaxAge:   60 * 60 * 24 * 30,
+		Secure:   secureCookie(r),
+		MaxAge:   60 * 60 * 24,
 	})
 	return nil
 }
@@ -166,6 +169,7 @@ func (s *AuthStore) clearSession(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(authCookieName); err == nil {
 		s.mu.Lock()
 		delete(s.sessions, cookie.Value)
+		delete(s.expires, cookie.Value)
 		s.mu.Unlock()
 	}
 	http.SetCookie(w, &http.Cookie{
@@ -174,7 +178,7 @@ func (s *AuthStore) clearSession(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   r.TLS != nil,
+		Secure:   secureCookie(r),
 		MaxAge:   -1,
 	})
 }
@@ -186,6 +190,10 @@ func (s *AuthStore) User(r *http.Request) *models.User {
 		return nil
 	}
 	s.mu.RLock()
+	if !time.Now().Before(s.expires[cookie.Value]) {
+		s.mu.RUnlock()
+		return nil
+	}
 	userID := s.sessions[cookie.Value]
 	for _, record := range s.users {
 		if record.ID == userID {
@@ -200,6 +208,9 @@ func (s *AuthStore) User(r *http.Request) *models.User {
 
 // Register creates a local account and logs the browser into it.
 func (s *AuthStore) Register(email, name, password string) (*models.User, error) {
+	if privateData(name) || privateData(email) {
+		return nil, errors.New("Не указывайте платёжные данные в профиле")
+	}
 	email = normalizeEmail(email)
 	name = strings.TrimSpace(name)
 	if !validEmail(email) {
@@ -261,7 +272,7 @@ func (s *AuthStore) Login(email, password string) (*models.User, error) {
 }
 
 // AuthHandler exposes GET/POST/DELETE /api/auth for the localhost account.
-func AuthHandler(auth *AuthStore, carts *CartStore) http.HandlerFunc {
+func AuthHandler(auth *AuthStore, carts *CartStore, conversations ...*ConversationStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method {
@@ -298,7 +309,7 @@ func AuthHandler(auth *AuthStore, carts *CartStore) http.HandlerFunc {
 				writeJSONError(w, http.StatusInternalServerError, "Не удалось создать сессию аккаунта")
 				return
 			}
-			if carts != nil {
+			if carts != nil && request.MergeCart {
 				if err := carts.MergeSessionIntoUser(w, r, user.ID); err != nil {
 					writeJSONError(w, http.StatusInternalServerError, "Не удалось перенести корзину в аккаунт")
 					return
@@ -306,6 +317,9 @@ func AuthHandler(auth *AuthStore, carts *CartStore) http.HandlerFunc {
 			}
 			writeJSON(w, models.AuthResponse{Authenticated: true, User: user})
 		case http.MethodDelete:
+			if user := auth.User(r); user != nil && len(conversations) > 0 {
+				conversations[0].forget(accountCartKey(user.ID))
+			}
 			auth.clearSession(w, r)
 			writeJSON(w, models.AuthResponse{Authenticated: false})
 		default:
