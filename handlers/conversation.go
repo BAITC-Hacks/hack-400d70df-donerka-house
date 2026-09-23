@@ -9,9 +9,15 @@ import (
 
 const maxConversationMessages = 12
 
+type pendingPurchase struct {
+	Product  models.Product
+	Quantity int
+}
+
 type conversation struct {
 	messages       []openai.ChatCompletionMessage
 	recentProducts []models.Product
+	pending        *pendingPurchase
 }
 
 // ConversationStore keeps a small amount of context per browser session so
@@ -49,5 +55,33 @@ func (s *ConversationStore) append(sessionID string, userMessage, assistantMessa
 		products = products[:4]
 	}
 	entry.recentProducts = append([]models.Product(nil), products...)
+	s.conversations[sessionID] = entry
+}
+
+
+func (s *ConversationStore) setPending(sessionID string, product models.Product, quantity int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entry := s.conversations[sessionID]
+	entry.pending = &pendingPurchase{Product: product, Quantity: quantity}
+	s.conversations[sessionID] = entry
+}
+
+func (s *ConversationStore) getPending(sessionID string) *pendingPurchase {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	entry := s.conversations[sessionID]
+	if entry.pending == nil {
+		return nil
+	}
+	copy := *entry.pending
+	return &copy
+}
+
+func (s *ConversationStore) clearPending(sessionID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entry := s.conversations[sessionID]
+	entry.pending = nil
 	s.conversations[sessionID] = entry
 }
