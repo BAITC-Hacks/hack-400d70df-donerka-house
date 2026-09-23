@@ -13,6 +13,8 @@ import (
 	"github.com/BAITC-Hacks/hack-400d70df-donerka-house/models"
 )
 
+const publishedCatalogLimit = 1200
+
 func loadCatalog(api *handlers.EKTAPI) (*models.Catalog, error) {
 	catalog := &models.Catalog{}
 	// Start immediately from the local snapshot. The authenticated EKT catalog
@@ -57,7 +59,7 @@ func loadCatalog(api *handlers.EKTAPI) (*models.Catalog, error) {
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 			defer cancel()
-			products, err := api.LoadProducts(ctx)
+			products, err := api.LoadProductsLimit(ctx, publishedCatalogLimit)
 			if err != nil {
 				log.Printf("⚠️ Authenticated EKT catalog sync failed: %v", err)
 				return

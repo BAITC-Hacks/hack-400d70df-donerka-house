@@ -52,6 +52,13 @@ func TestEKTAPILoadsPagesAndDetailsWithBasicAuth(t *testing.T) {
 	if len(products) != 3 || products[2].ID != 2 {
 		t.Fatalf("unexpected paginated products: %+v", products)
 	}
+	limited, err := api.LoadProductsLimit(context.Background(), 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(limited) != 2 || limited[1].ID != 3 {
+		t.Fatalf("unexpected limited catalog: %+v", limited)
+	}
 
 	enriched := api.Enrich(context.Background(), products[:1])
 	if enriched[0].TotalStockQuantity != 7 || enriched[0].Availability != "В наличии" || enriched[0].Stores[0].Name != "Алматы" || enriched[0].Properties["Бренд"] != "EKT" {

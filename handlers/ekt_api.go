@@ -88,17 +88,23 @@ func (a *EKTAPI) loadProductsPage(ctx context.Context, page int) (models.Product
 // an empty or short page. Some EKT responses use count as page size, so the
 // client does not rely on count alone to decide when pagination is complete.
 func (a *EKTAPI) LoadProducts(ctx context.Context) ([]models.Product, error) {
-	return a.loadProducts(ctx, nil)
+	return a.loadProducts(ctx, nil, 0)
+}
+
+// LoadProductsLimit loads a stable, bounded catalog snapshot. A positive limit
+// stops pagination once that many unique products have been collected.
+func (a *EKTAPI) LoadProductsLimit(ctx context.Context, limit int) ([]models.Product, error) {
+	return a.loadProducts(ctx, nil, limit)
 }
 
 // LoadProductsIncremental is the same paginated API read, but invokes onPage
 // after every page so a running server can expose newly loaded products before
 // the entire catalog has finished synchronizing.
 func (a *EKTAPI) LoadProductsIncremental(ctx context.Context, onPage func([]models.Product)) ([]models.Product, error) {
-	return a.loadProducts(ctx, onPage)
+	return a.loadProducts(ctx, onPage, 0)
 }
 
-func (a *EKTAPI) loadProducts(ctx context.Context, onPage func([]models.Product)) ([]models.Product, error) {
+func (a *EKTAPI) loadProducts(ctx context.Context, onPage func([]models.Product), limit int) ([]models.Product, error) {
 	if !a.Enabled() {
 		return nil, errors.New("EKT API credentials are not configured")
 	}
@@ -113,6 +119,7 @@ func (a *EKTAPI) loadProducts(ctx context.Context, onPage func([]models.Product)
 			break
 		}
 		pageProducts := make([]models.Product, 0, len(result.Items))
+		reachedLimit := false
 		for _, product := range result.Items {
 			if product.ID == 0 {
 				continue
@@ -123,9 +130,16 @@ func (a *EKTAPI) loadProducts(ctx context.Context, onPage func([]models.Product)
 			seen[product.ID] = struct{}{}
 			products = append(products, product)
 			pageProducts = append(pageProducts, product)
+			if limit > 0 && len(products) >= limit {
+				reachedLimit = true
+				break
+			}
 		}
 		if onPage != nil && len(pageProducts) > 0 {
 			onPage(pageProducts)
+		}
+		if reachedLimit {
+			break
 		}
 		if result.PerPage > 0 && len(result.Items) < result.PerPage {
 			break
