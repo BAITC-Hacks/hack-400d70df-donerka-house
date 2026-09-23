@@ -2,10 +2,12 @@
 
 const API_CHAT = '/api/chat';
 const API_CART = '/api/cart';
+const API_AUTH = '/api/auth';
 let isOpen = false;
 let isBusy = false;
 let chipsHidden = false;
 let cart = [];
+let authMode = 'login';
 
 function safeURL(value) {
   try {
@@ -111,6 +113,114 @@ async function loadCart() {
     if (res.ok) applyCart(await res.json());
   } catch {
     showToast('⚠️ Не удалось загрузить корзину');
+  }
+}
+
+// ==== LOCAL ACCOUNT MANAGEMENT ====
+
+async function loadAuth() {
+  try {
+    const res = await fetch(API_AUTH);
+    if (res.ok) applyAuthState(await res.json());
+  } catch {
+    // The basket remains usable as a guest cart if the account endpoint is unavailable.
+  }
+}
+
+function openAuthModal() {
+  const modal = document.getElementById('authModal');
+  if (!modal) return;
+  modal.classList.add('open');
+  modal.setAttribute('aria-hidden', 'false');
+  setTimeout(() => {
+    const field = document.getElementById('authEmail');
+    if (field) field.focus();
+  }, 50);
+}
+
+function closeAuthModal() {
+  const modal = document.getElementById('authModal');
+  if (!modal) return;
+  modal.classList.remove('open');
+  modal.setAttribute('aria-hidden', 'true');
+  const error = document.getElementById('authError');
+  if (error) error.textContent = '';
+}
+
+function toggleAuthMode() {
+  authMode = authMode === 'login' ? 'register' : 'login';
+  const register = authMode === 'register';
+  document.getElementById('authTitle').textContent = register ? 'Создать аккаунт' : 'Вход в аккаунт';
+  document.getElementById('authNameField').style.display = register ? 'block' : 'none';
+  document.getElementById('authPassword').setAttribute('autocomplete', register ? 'new-password' : 'current-password');
+  document.getElementById('authSubmit').textContent = register ? 'Зарегистрироваться' : 'Войти';
+  document.getElementById('authModeToggle').textContent = register ? 'У меня уже есть аккаунт' : 'Создать новый аккаунт';
+  document.getElementById('authError').textContent = '';
+}
+
+async function submitAuth(event) {
+  event.preventDefault();
+  const submit = document.getElementById('authSubmit');
+  const error = document.getElementById('authError');
+  const payload = {
+    action: authMode,
+    email: document.getElementById('authEmail').value.trim(),
+    password: document.getElementById('authPassword').value,
+    name: document.getElementById('authName').value.trim(),
+  };
+  error.textContent = '';
+  submit.disabled = true;
+  try {
+    const res = await fetch(API_AUTH, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      error.textContent = data.error || 'Не удалось выполнить вход';
+      return;
+    }
+    applyAuthState(data);
+    document.getElementById('authPassword').value = '';
+    closeAuthModal();
+    await loadCart();
+    showToast(`✅ Добро пожаловать, ${data.user?.name || data.user?.email || 'пользователь'}!`);
+  } catch {
+    error.textContent = 'Нет соединения с сервером';
+  } finally {
+    submit.disabled = false;
+  }
+}
+
+async function logoutAccount() {
+  try {
+    const res = await fetch(API_AUTH, { method: 'DELETE' });
+    if (!res.ok) throw new Error('logout failed');
+    applyAuthState({ authenticated: false });
+    closeAuthModal();
+    await loadCart();
+    showToast('Вы вышли из аккаунта');
+  } catch {
+    showToast('⚠️ Не удалось выйти из аккаунта');
+  }
+}
+
+function applyAuthState(data) {
+  const authenticated = Boolean(data && data.authenticated && data.user);
+  const accountButton = document.getElementById('accountButton');
+  const guest = document.getElementById('authGuestView');
+  const user = document.getElementById('authUserView');
+  const note = document.getElementById('cartNote');
+  if (accountButton) accountButton.textContent = authenticated ? `👤 ${data.user.name || data.user.email}` : 'Войти';
+  if (guest) guest.style.display = authenticated ? 'none' : 'block';
+  if (user) user.style.display = authenticated ? 'block' : 'none';
+  if (authenticated) {
+    document.getElementById('authUserName').textContent = data.user.name || 'Аккаунт';
+    document.getElementById('authUserEmail').textContent = data.user.email || '';
+    if (note) note.textContent = 'Корзина сохранена за вашим аккаунтом.';
+  } else if (note) {
+    note.textContent = 'Корзина сохранена для этой сессии браузера. Войдите, чтобы сохранить её за аккаунтом.';
   }
 }
 
@@ -367,17 +477,24 @@ function now() {
   return date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
 }
 
-document.addEventListener('DOMContentLoaded', loadCart);
+document.addEventListener('DOMContentLoaded', () => {
+  loadAuth();
+  loadCart();
+});
 
 document.addEventListener('click', event => {
   const widget = document.getElementById('chatWidget');
   const bubble = document.getElementById('chatBubble');
   const cartPanel = document.getElementById('cartPanel');
   const cartButton = document.getElementById('cartButton');
+  const authModal = document.getElementById('authModal');
   if (isOpen && widget && bubble && !widget.contains(event.target) && !bubble.contains(event.target)) {
     toggleChat();
   }
   if (cartPanel && cartPanel.classList.contains('open') && !cartPanel.contains(event.target) && !cartButton.contains(event.target)) {
     closeCart();
+  }
+  if (authModal && authModal.classList.contains('open') && event.target === authModal) {
+    closeAuthModal();
   }
 });

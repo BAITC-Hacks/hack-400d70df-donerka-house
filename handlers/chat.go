@@ -468,8 +468,15 @@ func productResultsFromProducts(products []models.Product) []models.ProductResul
 	return results
 }
 
-// ChatHandler handles POST /api/chat.
+// ChatHandler keeps the original anonymous-session behavior for tests and
+// deployments that do not configure local accounts.
 func ChatHandler(catalog *models.Catalog, store *CartStore, live *LiveCatalog, conversations *ConversationStore, ektAPIs ...*EKTAPI) http.HandlerFunc {
+	return ChatHandlerWithAuth(catalog, store, live, conversations, nil, ektAPIs...)
+}
+
+// ChatHandlerWithAuth uses the authenticated account as the cart and
+// conversation owner when one is available. Guests retain a browser session.
+func ChatHandlerWithAuth(catalog *models.Catalog, store *CartStore, live *LiveCatalog, conversations *ConversationStore, auth *AuthStore, ektAPIs ...*EKTAPI) http.HandlerFunc {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	var ektAPI *EKTAPI
 	if len(ektAPIs) > 0 {
@@ -493,7 +500,7 @@ func ChatHandler(catalog *models.Catalog, store *CartStore, live *LiveCatalog, c
 			return
 		}
 
-		sessionID, err := store.sessionID(w, r)
+		sessionID, err := store.keyForRequest(w, r, auth)
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "Could not create a chat session")
 			return

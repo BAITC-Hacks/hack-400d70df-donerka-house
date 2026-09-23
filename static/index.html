@@ -30,7 +30,7 @@
       <div class="topbar-links">
         <a href="https://ekt.kz/about/" target="_blank">Покупателям</a>
         <a href="https://pro.ekt.kz/" target="_blank">B2B — ЕКТ PRO</a>
-        <a href="https://ekt.kz/personal/" target="_blank">Личный кабинет</a>
+        <button class="account-link" id="accountButton" type="button" onclick="openAuthModal()">Войти</button>
       </div>
     </div>
   </div>
@@ -67,6 +67,40 @@
   <!-- TOAST NOTIFICATION CONTAINER -->
   <div id="toastContainer" class="toast-container"></div>
 
+  <!-- LOCAL ACCOUNT -->
+  <div class="auth-modal" id="authModal" aria-hidden="true">
+    <div class="auth-dialog" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+      <button class="auth-close-btn" type="button" onclick="closeAuthModal()" aria-label="Закрыть">✕</button>
+      <div id="authGuestView">
+        <div class="auth-eyebrow">Аккаунт помощника</div>
+        <h2 id="authTitle">Вход в аккаунт</h2>
+        <p class="auth-subtitle">После входа корзина будет сохранена за вашим аккаунтом на localhost.</p>
+        <form id="authForm" onsubmit="submitAuth(event)">
+          <label class="auth-label" for="authEmail">Email</label>
+          <input class="auth-input" id="authEmail" type="email" autocomplete="email" required placeholder="you@example.com" />
+          <div id="authNameField" style="display:none">
+            <label class="auth-label" for="authName">Имя</label>
+            <input class="auth-input" id="authName" type="text" autocomplete="name" maxlength="80" placeholder="Ваше имя" />
+          </div>
+          <label class="auth-label" for="authPassword">Пароль</label>
+          <input class="auth-input" id="authPassword" type="password" autocomplete="current-password" minlength="8" required placeholder="Минимум 8 символов" />
+          <div class="auth-error" id="authError" role="alert"></div>
+          <button class="btn btn-primary auth-submit" id="authSubmit" type="submit">Войти</button>
+        </form>
+        <button class="auth-mode-toggle" id="authModeToggle" type="button" onclick="toggleAuthMode()">Создать новый аккаунт</button>
+        <a class="auth-external-link" href="https://ekt.kz/personal/" target="_blank" rel="noopener noreferrer">Открыть личный кабинет EKT ↗</a>
+      </div>
+      <div id="authUserView" style="display:none">
+        <div class="auth-eyebrow">Вы вошли</div>
+        <h2 id="authUserName">Аккаунт</h2>
+        <p class="auth-subtitle" id="authUserEmail"></p>
+        <p class="auth-account-note">Ваша корзина и добавления AI привязаны к этому аккаунту.</p>
+        <button class="btn btn-outline auth-submit" type="button" onclick="logoutAccount()">Выйти</button>
+        <a class="auth-external-link" href="https://ekt.kz/personal/" target="_blank" rel="noopener noreferrer">Открыть личный кабинет EKT ↗</a>
+      </div>
+    </div>
+  </div>
+
   <!-- SESSION CART -->
   <aside class="cart-panel" id="cartPanel" aria-label="Корзина">
     <div class="cart-panel-header">
@@ -78,7 +112,7 @@
       <div class="cart-panel-total-row"><span>Итого</span><strong id="cartPanelTotal">0 тг</strong></div>
       <button id="clearCartBtn" class="btn btn-outline cart-clear-btn" type="button" onclick="clearCart()">Очистить</button>
       <a class="btn btn-primary cart-checkout-btn" href="https://ekt.kz/personal/" target="_blank" rel="noopener noreferrer">Перейти к оформлению</a>
-      <p class="cart-note">Корзина сохранена для этой сессии браузера.</p>
+      <p class="cart-note" id="cartNote">Корзина сохранена для этой сессии браузера.</p>
     </div>
   </aside>
 

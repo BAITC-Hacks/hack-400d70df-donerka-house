@@ -112,6 +112,10 @@ func main() {
 
 	mux := http.NewServeMux()
 	cartStore := handlers.NewCartStore()
+	accountStore, err := handlers.NewAuthStore(os.Getenv("ACCOUNT_STORE_PATH"))
+	if err != nil {
+		log.Fatalf("Failed to initialize account store: %v", err)
+	}
 	liveCatalog := handlers.NewLiveCatalog(os.Getenv("EKT_CATALOG_URL"))
 	conversationStore := handlers.NewConversationStore()
 
@@ -120,8 +124,9 @@ func main() {
 
 	// API
 	mux.HandleFunc("/api/catalog", handlers.CatalogHandler(catalog))
-	mux.HandleFunc("/api/chat", handlers.ChatHandler(catalog, cartStore, liveCatalog, conversationStore, ektAPI))
-	mux.HandleFunc("/api/cart", handlers.CartHandler(catalog, cartStore))
+	mux.HandleFunc("/api/auth", handlers.AuthHandler(accountStore, cartStore))
+	mux.HandleFunc("/api/chat", handlers.ChatHandlerWithAuth(catalog, cartStore, liveCatalog, conversationStore, accountStore, ektAPI))
+	mux.HandleFunc("/api/cart", handlers.CartHandlerWithAuth(catalog, cartStore, accountStore))
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"status":"ok","products":%d}`, catalog.ProductCount())

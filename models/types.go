@@ -141,6 +141,28 @@ type CartResponse struct {
 	Total float64    `json:"total"`
 }
 
+// User is the safe public representation of a local assistant account.
+// Password material is never exposed in API responses.
+type User struct {
+	ID    string `json:"id"`
+	Email string `json:"email"`
+	Name  string `json:"name"`
+}
+
+// AuthRequest is used by the local account API.
+type AuthRequest struct {
+	Action   string `json:"action"`
+	Email    string `json:"email"`
+	Name     string `json:"name"`
+	Password string `json:"password"`
+}
+
+// AuthResponse describes the current local login state.
+type AuthResponse struct {
+	Authenticated bool  `json:"authenticated"`
+	User          *User `json:"user,omitempty"`
+}
+
 // CartRequest is used to add a catalog product to the current session cart.
 type CartRequest struct {
 	Article  string `json:"article"`

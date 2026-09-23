@@ -58,6 +58,59 @@ func (s *CartStore) sessionID(w http.ResponseWriter, r *http.Request) (string, e
 	return id, nil
 }
 
+func accountCartKey(userID string) string {
+	return "account:" + userID
+}
+
+// MergeSessionIntoUser moves the current guest basket into the authenticated
+// account. Existing quantities are combined instead of being overwritten.
+func (s *CartStore) MergeSessionIntoUser(w http.ResponseWriter, r *http.Request, userID string) error {
+	sessionID, err := s.sessionID(w, r)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(userID) == "" || sessionID == accountCartKey(userID) {
+		return nil
+	}
+
+	s.mu.Lock()
+	guestItems := s.carts[sessionID]
+	if len(guestItems) > 0 {
+		accountKey := accountCartKey(userID)
+		if s.carts[accountKey] == nil {
+			s.carts[accountKey] = make(map[string]models.CartItem)
+		}
+		for article, item := range guestItems {
+			if existing, ok := s.carts[accountKey][article]; ok {
+				existing.Quantity += item.Quantity
+				s.carts[accountKey][article] = existing
+			} else {
+				s.carts[accountKey][article] = item
+			}
+		}
+		delete(s.carts, sessionID)
+	}
+	s.mu.Unlock()
+	return nil
+}
+
+func (s *CartStore) keyForRequest(w http.ResponseWriter, r *http.Request, auth *AuthStore) (string, error) {
+	sessionID, err := s.sessionID(w, r)
+	if err != nil {
+		return "", err
+	}
+	if auth == nil {
+		return sessionID, nil
+	}
+	if user := auth.User(r); user != nil {
+		if err := s.MergeSessionIntoUser(w, r, user.ID); err != nil {
+			return "", err
+		}
+		return accountCartKey(user.ID), nil
+	}
+	return sessionID, nil
+}
+
 func (s *CartStore) snapshot(sessionID string) models.CartResponse {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -102,11 +155,18 @@ func (s *CartStore) remove(sessionID, article string) models.CartResponse {
 	return s.snapshot(sessionID)
 }
 
-// CartHandler exposes GET/POST/DELETE /api/cart for the current browser session.
+// CartHandler keeps the original anonymous-session behavior for callers that
+// do not configure local accounts.
 func CartHandler(catalog *models.Catalog, store *CartStore) http.HandlerFunc {
+	return CartHandlerWithAuth(catalog, store, nil)
+}
+
+// CartHandlerWithAuth exposes GET/POST/DELETE /api/cart. Authenticated users
+// get an account-owned cart, while guests continue to use their browser cart.
+func CartHandlerWithAuth(catalog *models.Catalog, store *CartStore, auth *AuthStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		sessionID, err := store.sessionID(w, r)
+		cartKey, err := store.keyForRequest(w, r, auth)
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "Could not create a cart session")
 			return
@@ -114,7 +174,7 @@ func CartHandler(catalog *models.Catalog, store *CartStore) http.HandlerFunc {
 
 		switch r.Method {
 		case http.MethodGet:
-			writeJSON(w, store.snapshot(sessionID))
+			writeJSON(w, store.snapshot(cartKey))
 		case http.MethodPost:
 			var req models.CartRequest
 			decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10))
@@ -131,10 +191,10 @@ func CartHandler(catalog *models.Catalog, store *CartStore) http.HandlerFunc {
 				writeJSONError(w, http.StatusNotFound, "Product was not found in the catalog")
 				return
 			}
-			writeJSON(w, store.add(sessionID, *product, req.Quantity))
+			writeJSON(w, store.add(cartKey, *product, req.Quantity))
 		case http.MethodDelete:
 			article := strings.TrimSpace(r.URL.Query().Get("article"))
-			writeJSON(w, store.remove(sessionID, article))
+			writeJSON(w, store.remove(cartKey, article))
 		default:
 			writeJSONError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		}

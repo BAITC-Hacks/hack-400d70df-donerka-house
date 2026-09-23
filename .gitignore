@@ -5,6 +5,8 @@ donerka-server
 # Environment files (NEVER commit these!)
 .env
 .env.local
+data/accounts.json
+data/accounts.json.tmp
 
 # Go build cache
 vendor/
