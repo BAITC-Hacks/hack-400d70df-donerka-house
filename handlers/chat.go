@@ -78,87 +78,7 @@ var productChoicePattern = regexp.MustCompile(`(?i)(перв|втор|трет|�
 var availabilityQuestionPattern = regexp.MustCompile(`(?i)(налич|склад|остат|есть\s+ли|доступн|под\s+заказ|в\s+налич|stock|availab|inventory)`)
 var catalogReferencePattern = regexp.MustCompile(`(?i)[a-zа-я0-9]+(?:[-_/][a-zа-я0-9]+)+|[a-zа-я0-9]*[a-zа-я][a-zа-я0-9_/-]*\d[a-zа-я0-9_/-]*|\d{4,}`)
 var quantityFollowupPurchasePattern = regexp.MustCompile(`(?i)^\s*(?:(?:дай|дайте)(?:\s+мне)?|добав(?:ь|ьте)(?:\s+мне)?|беру|возьму)?\s*\d+\s*(?:шт\.?|штук(?:и)?|pcs)\s*$`)
-var confirmationPattern = regexp.MustCompile(`(?i)^\s*(?:да\s*,?\s*добав(?:ь|ьте)|подтверждаю\s+добавление|confirm\s+add)\s*[.!]?\s*package handlers
-
-import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"net/http"
-	"os"
-	"regexp"
-	"strconv"
-	"strings"
-	"time"
-	"unicode"
-
-	"github.com/BAITC-Hacks/hack-400d70df-donerka-house/models"
-	openai "github.com/sashabaranov/go-openai"
-)
-
-const systemPromptBase = `Ты — умный AI-ассистент интернет-магазина ГК Электрокомплект (ekt.kz).
-
-О компании:
-- Название: ГК Электрокомплект (сайт: ekt.kz)
-- Крупнейший производитель и поставщик электротехнической продукции в Казахстане
-- Офисы в городах: Алматы, Астана, Шымкент, Тараз, Атырау, Актау, Караганда, Талдыкорган, Усть-Каменогорск
-- Телефон: +7 (727) 346-88-88 | +7 (778) 046-88-88
-- B2B платформа: pro.ekt.kz
-- WhatsApp: +7 (778) 276-88-88
-
-Категории товаров:
-- Кабель / Провод
-- Светильники / Лампы
-- Низковольтная аппаратура (автоматические выключатели, реле, контакторы)
-- Кабеленесущие системы
-- Изделия для монтажа и инструмент
-- Шкафы / Щиты
-- Розетки / Выключатели / Коробки
-- Автоматизация
-- Видеонаблюдение / СКУД / Сигнализация
-- Инструмент / КИП
-
-Сервис:
-- Доставка по всему Казахстану
-- Онлайн-оплата (AirbaPay, Cloudpayments)
-- Рассрочка
-- Возврат и обмен
-- Щиты под заказ
-
-Твоя задача:
-1. Помогать клиентам найти нужные товары по описанию или артикулу
-2. Отвечать на вопросы о наличии, ценах, характеристиках
-3. Консультировать по выбору оборудования
-4. Направлять на нужные разделы сайта
-5. Если клиент хочет купить товар, сначала зафиксируй товар и количество, затем попроси отдельное подтверждение «да, добавь». Корзина меняется только после такого подтверждения.
-
-Важно:
-- Фразы «хочу купить», «беру», «дай 5 шт» или «добавь 5 шт» означают намерение купить, но НЕ являются финальным подтверждением.
-- После выбора товара и количества обязательно попроси отдельное подтверждение «да, добавь».
-- Корзина должна меняться только после отдельного подтверждения клиента.
-- Если товар недоступен, предложи релевантные аналоги и кратко объясни, почему они подходят.
-- Если в данных есть сертификаты, сообщи ссылки. Если сертификатов нет, не выдумывай их.
-- Условия покупки: доставка по Казахстану; онлайн-оплата AirbaPay/Cloudpayments; рассрочка. Для прототипа минимальная партия — 1 шт., если для конкретного товара не указано иное.
-- Если клиент спрашивает «для чего это», «где применяется», «чем отличается» или задаёт технический вопрос, объясни назначение, применение, ограничения и ключевые характеристики выбранного товара по данным из актуального контекста сайта.
-- Говори о наличии только по полям «Наличие», «Количество в регионе» и «Регион» из актуальных данных EKT. Не выдумывай остатки.
-- Если указано «В наличии», сообщай, что товар доступен в регионе страницы EKT; если указано количество — называй его как доступный региональный лимит. Если «Под заказ», прямо сообщай это.
-- Если данных о наличии нет, честно скажи, что публичная страница не показала статус, и дай ссылку на товар. Не говори, что проверить наличие невозможно, когда статус есть в контексте.
-- Все цены в тенге (тг / KZT)
-- Если клиент спрашивает конкретный товар — он будет показан отдельно карточками с фото, просто дай краткое текстовое описание
-- Отвечай на русском (или на языке клиента)
-- Будь лаконичным, профессиональным и дружелюбным
-- НЕ перечисляй товары списком в тексте — они будут показаны карточками автоматически
-
-`
-
-var addIntentPattern = regexp.MustCompile(`(?i)(добав(?:ь|ить|ьте)|хочу\s+куп|куп(?:и|ить|лю)|покупаю|закаж(?:и|у|ем)|оформля(?:ю|ем)|беру|выбира(?:ю|ем)|выбрал|выбрала|add\s+(?:this\s+)?(?:to\s+)?cart|buy|purchase|i\s+(?:choose|want\s+this)|this\s+one|that\s+one|first\s+one)`)
-var quantityAfterLabelPattern = regexp.MustCompile(`(?i)(?:x|×|колич(?:ество|\-во)?|шт\.?|штук(?:и)?)\s*[:=]?\s*(\d+)`)
-var quantityBeforeUnitPattern = regexp.MustCompile(`(?i)\b(\d+)\s*(?:шт\.?|штук(?:и)?|pcs)`)
-var productChoicePattern = regexp.MustCompile(`(?i)(перв|втор|трет|четверт|номер\s*\d+|№\s*\d+|first|second|third|fourth)`)
-var availabilityQuestionPattern = regexp.MustCompile(`(?i)(налич|склад|остат|есть\s+ли|доступн|под\s+заказ|в\s+налич|stock|availab|inventory)`)
-var catalogReferencePattern = regexp.MustCompile(`(?i)[a-zа-я0-9]+(?:[-_/][a-zа-я0-9]+)+|[a-zа-я0-9]*[a-zа-я][a-zа-я0-9_/-]*\d[a-zа-я0-9_/-]*|\d{4,}`)
-var quantityFollowupPurchasePattern = regexp.MustCompile(`(?i)^\s*(?:(?:дай|дайте)(?:\s+мне)?|добав(?:ь|ьте)(?:\s+мне)?|беру|возьму)?\s*\d+\s*(?:шт\.?|штук(?:и)?|pcs)\s*$`)
-)
+var confirmationPattern = regexp.MustCompile(`(?i)^\s*(?:да\s*,?\s*добав(?:ь|ьте)|подтверждаю\s+добавление|confirm\s+add)\s*[.!]?\s*$`)
 var cancellationPattern = regexp.MustCompile(`(?i)^\s*(?:нет|не\s+надо|отмена|отмени|cancel)\s*[.!]?\s*$`)
 var purchaseTermsPattern = regexp.MustCompile(`(?i)(услови.{0,8}(?:покуп|заказ)|оплат|достав|минимальн.{0,8}(?:парт|заказ)|рассроч)`)
 
@@ -303,31 +223,41 @@ func searchProducts(catalog *models.Catalog, query string, limit int) []models.P
 	return out
 }
 
-func normalizeArticleReference(value string) string {
-	value = strings.ToLower(strings.TrimSpace(value))
-	value = strings.Trim(value, "\"'.,;:()[]{}")
-	return strings.TrimRight(value, "_- ")
-}
-
 func findProductByReference(catalog *models.Catalog, reference string) *models.Product {
 	reference = strings.TrimSpace(reference)
-	if reference == "" {
+	if normalizeReference(reference) == "" {
 		return nil
 	}
-	normalizedReference := normalizeArticleReference(reference)
 	products := catalog.ProductsSnapshot()
 	for i := range products {
 		product := &products[i]
-		if normalizeArticleReference(product.Article) == normalizedReference || strconv.Itoa(product.ID) == reference {
+		if referencesEqual(product.Article, reference) || strconv.Itoa(product.ID) == reference {
 			return product
 		}
 	}
+	// Supplier/article codes such as 027228 are present in the product name
+	// while the API article may be a different internal code.
 	for i := range products {
-		if strings.Contains(strings.ToLower(products[i].Name), strings.ToLower(reference)) {
+		if strings.Contains(strings.ToLower(products[i].Name), reference) {
 			return &products[i]
 		}
 	}
 	return nil
+}
+
+// normalizeReference handles the supplier format used by EKT, where many
+// catalog articles contain a trailing underscore (for example 010400273_)
+// while customers usually type the visible number without it.
+func normalizeReference(reference string) string {
+	value := strings.ToLower(strings.TrimSpace(reference))
+	value = strings.Trim(value, "\"'`.,;:()[]{}")
+	return strings.TrimRight(value, "_")
+}
+
+func referencesEqual(left, right string) bool {
+	left = normalizeReference(left)
+	right = normalizeReference(right)
+	return left != "" && left == right
 }
 
 func hasAddIntent(message string) bool {
@@ -425,12 +355,83 @@ func cartAction(product *models.Product, quantity int) *models.CartAction {
 	}
 }
 
-func createCompletion(ctx context.Context, client *openai.Client, messages []openai.ChatCompletionMessage) (openai.ChatCompletionResponse, error) {
+func addToCartFromMessage(catalog *models.Catalog, store *CartStore, sessionID, message string, contextProducts ...[]models.Product) (*models.CartAction, *models.CartResponse, string) {
+	if !hasAddIntent(message) {
+		return nil, nil, ""
+	}
+	quantity := requestedQuantity(message)
+	if quantity < 1 || quantity > maxCartQuantity {
+		return nil, nil, "Количество должно быть от 1 до 999."
+	}
+	product := inferProductForAdd(catalog, message, contextProducts...)
+	if product == nil {
+		return nil, nil, "Уточните артикул или выберите один товар из карточек, чтобы я добавил его в корзину."
+	}
+	cart := store.add(sessionID, *product, quantity)
+	return cartAction(product, quantity), &cart, fmt.Sprintf("✅ Добавил «%s» (%d шт.) в корзину.", product.Name, quantity)
+}
+
+func addToCartFromTool(catalog *models.Catalog, store *CartStore, sessionID, userMessage string, arguments string, contextProducts ...[]models.Product) (*models.CartAction, *models.CartResponse, map[string]any) {
+	var args models.CartRequest
+	if err := json.Unmarshal([]byte(arguments), &args); err != nil {
+		return nil, nil, map[string]any{"ok": false, "error": "invalid_arguments"}
+	}
+	if !hasAddIntent(userMessage) {
+		return nil, nil, map[string]any{"ok": false, "error": "explicit_customer_consent_required"}
+	}
+	if args.Quantity < 1 || args.Quantity > maxCartQuantity {
+		return nil, nil, map[string]any{"ok": false, "error": "quantity_must_be_between_1_and_999"}
+	}
+	product := findProductByReference(catalog, args.Article)
+	if product == nil && len(contextProducts) > 0 {
+		product = selectedProductFromContext(userMessage, contextProducts[0])
+	}
+	if product == nil {
+		return nil, nil, map[string]any{"ok": false, "error": "product_not_found"}
+	}
+	cart := store.add(sessionID, *product, args.Quantity)
+	action := cartAction(product, args.Quantity)
+	return action, &cart, map[string]any{
+		"ok":       true,
+		"article":  product.Article,
+		"name":     product.Name,
+		"quantity": args.Quantity,
+	}
+}
+
+func addToCartTool() openai.Tool {
+	return openai.Tool{
+		Type: openai.ToolTypeFunction,
+		Function: &openai.FunctionDefinition{
+			Name:        "add_to_cart",
+			Description: "Adds one catalog product to the current user's cart after the customer clearly chooses it. Do not ask for a second confirmation after phrases such as 'I will take this', 'the first one', or 'add it'. The server validates the article and quantity.",
+			Parameters: map[string]any{
+				"type":                 "object",
+				"additionalProperties": false,
+				"properties": map[string]any{
+					"article": map[string]any{
+						"type":        "string",
+						"description": "Exact catalog article from the catalog context, including a trailing underscore when present.",
+					},
+					"quantity": map[string]any{
+						"type":        "integer",
+						"description": "Positive quantity from 1 to 999.",
+					},
+				},
+				"required": []string{"article", "quantity"},
+			},
+		},
+	}
+}
+
+func createCompletion(ctx context.Context, client *openai.Client, messages []openai.ChatCompletionMessage, tools []openai.Tool, toolChoice any) (openai.ChatCompletionResponse, error) {
 	request := openai.ChatCompletionRequest{
 		Model:       "gpt-4o-mini",
 		Messages:    messages,
+		Tools:       tools,
+		ToolChoice:  toolChoice,
 		MaxTokens:   500,
-		Temperature: 0.4,
+		Temperature: 0.6,
 	}
 	var response openai.ChatCompletionResponse
 	var err error
@@ -474,7 +475,7 @@ func productsForResults(catalog *models.Catalog, results []models.ProductResult)
 	result := make([]models.Product, 0, len(results))
 	for _, match := range results {
 		for _, product := range products {
-			if strings.EqualFold(product.Article, match.Article) {
+			if referencesEqual(product.Article, match.Article) {
 				result = append(result, product)
 				break
 			}
@@ -513,13 +514,11 @@ func purchaseTermsReply() string {
 
 func productUnavailable(product models.Product) bool {
 	status := strings.ToLower(strings.TrimSpace(product.Availability))
-	return status == "под заказ" ||
-		status == "нет в наличии" ||
-		(status != "" && product.StockQuantity == 0 && product.TotalStockQuantity == 0 && status != "в наличии")
+	return status == "под заказ" || status == "нет в наличии"
 }
 
 func analogSimilarity(target, candidate models.Product) int {
-	if strings.EqualFold(target.Article, candidate.Article) || target.Article == "" || candidate.Article == "" {
+	if referencesEqual(target.Article, candidate.Article) || target.Article == "" || candidate.Article == "" {
 		return -1
 	}
 	score := 0
@@ -600,12 +599,14 @@ func appendAnalogFacts(reply string, target *models.Product, analogs []models.Pr
 	}
 	return strings.TrimSpace(reply) + "\n\nПодходящие аналоги: " + strings.Join(lines, "; ") + "."
 }
-
-// ChatHandler handles POST /api/chat.
+// ChatHandler keeps the original anonymous-session behavior for tests and
+// deployments that do not configure local accounts.
 func ChatHandler(catalog *models.Catalog, store *CartStore, live *LiveCatalog, conversations *ConversationStore, ektAPIs ...*EKTAPI) http.HandlerFunc {
 	return ChatHandlerWithAuth(catalog, store, live, conversations, nil, ektAPIs...)
 }
 
+// ChatHandlerWithAuth uses the authenticated account as the cart and
+// conversation owner when one is available. Guests retain a browser session.
 func ChatHandlerWithAuth(catalog *models.Catalog, store *CartStore, live *LiveCatalog, conversations *ConversationStore, auth *AuthStore, ektAPIs ...*EKTAPI) http.HandlerFunc {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	var ektAPI *EKTAPI
@@ -630,22 +631,22 @@ func ChatHandlerWithAuth(catalog *models.Catalog, store *CartStore, live *LiveCa
 			return
 		}
 
-		sessionID, err := store.keyForRequest(w, r, auth)
+		cartKey, err := store.keyForRequest(w, r, auth)
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "Could not create a chat session")
 			return
 		}
 
 		if isCancellation(req.Message) {
-			conversations.clearPending(sessionID)
+			conversations.clearPending(cartKey)
 			reply := "Хорошо, добавление в корзину отменено."
-			conversations.append(sessionID, req.Message, reply, nil)
+			conversations.append(cartKey, req.Message, reply, nil)
 			writeJSON(w, models.ChatResponse{Reply: reply})
 			return
 		}
 
 		if isExplicitConfirmation(req.Message) {
-			pending := conversations.getPending(sessionID)
+			pending := conversations.getPending(cartKey)
 			if pending == nil {
 				writeJSON(w, models.ChatResponse{Reply: "Сначала выберите товар и количество, затем я попрошу подтверждение."})
 				return
@@ -654,30 +655,30 @@ func ChatHandlerWithAuth(catalog *models.Catalog, store *CartStore, live *LiveCa
 			if latest := findProductByReference(catalog, product.Article); latest != nil {
 				product = *latest
 			}
-			if message := validateCartQuantity(store, sessionID, product, pending.Quantity); message != "" {
-				conversations.clearPending(sessionID)
+			if message := validateCartQuantity(store, cartKey, product, pending.Quantity); message != "" {
+				conversations.clearPending(cartKey)
 				analogs := findAnalogs(catalog, product, 3)
 				reply := appendAnalogFacts(message, &product, analogs)
 				writeJSON(w, models.ChatResponse{Reply: reply, Analogs: productResultsFromProducts(analogs)})
 				return
 			}
-			cart := store.add(sessionID, product, pending.Quantity)
+			cart := store.add(cartKey, product, pending.Quantity)
 			action := cartAction(&product, pending.Quantity)
-			conversations.clearPending(sessionID)
+			conversations.clearPending(cartKey)
 			reply := fmt.Sprintf("✅ Добавлено: «%s» — %d шт. Открыть актуальную корзину: /#cart", product.Name, pending.Quantity)
-			conversations.append(sessionID, req.Message, reply, []models.Product{product})
+			conversations.append(cartKey, req.Message, reply, []models.Product{product})
 			writeJSON(w, models.ChatResponse{Reply: reply, CartAction: action, Cart: &cart, CartURL: "/#cart"})
 			return
 		}
 
 		if purchaseTermsPattern.MatchString(req.Message) {
 			reply := purchaseTermsReply()
-			conversations.append(sessionID, req.Message, reply, nil)
+			conversations.append(cartKey, req.Message, reply, nil)
 			writeJSON(w, models.ChatResponse{Reply: reply})
 			return
 		}
 
-		_, recentProducts := conversations.get(sessionID)
+		_, recentProducts := conversations.get(cartKey)
 		liveProducts := make([]models.Product, 0)
 		if live != nil {
 			liveContext, cancel := context.WithTimeout(r.Context(), 7*time.Second)
@@ -729,20 +730,20 @@ func ChatHandlerWithAuth(catalog *models.Catalog, store *CartStore, live *LiveCa
 			product := inferProductForAdd(catalog, req.Message, contextProducts)
 			if product == nil {
 				reply := "Уточните артикул или выберите один товар из карточек."
-				conversations.append(sessionID, req.Message, reply, contextProducts)
+				conversations.append(cartKey, req.Message, reply, contextProducts)
 				writeJSON(w, models.ChatResponse{Reply: reply, Products: matchedProducts, Analogs: productResultsFromProducts(analogs)})
 				return
 			}
-			if message := validateCartQuantity(store, sessionID, *product, quantity); message != "" {
+			if message := validateCartQuantity(store, cartKey, *product, quantity); message != "" {
 				productAnalogs := findAnalogs(catalog, *product, 3)
 				reply := appendAnalogFacts(message, product, productAnalogs)
-				conversations.append(sessionID, req.Message, reply, contextProducts)
+				conversations.append(cartKey, req.Message, reply, contextProducts)
 				writeJSON(w, models.ChatResponse{Reply: reply, Products: matchedProducts, Analogs: productResultsFromProducts(productAnalogs)})
 				return
 			}
-			conversations.setPending(sessionID, *product, quantity)
+			conversations.setPending(cartKey, *product, quantity)
 			reply := fmt.Sprintf("Подтвердите: добавить «%s» — %d шт. в корзину? Напишите «да, добавь».", product.Name, quantity)
-			conversations.append(sessionID, req.Message, reply, []models.Product{*product})
+			conversations.append(cartKey, req.Message, reply, []models.Product{*product})
 			writeJSON(w, models.ChatResponse{Reply: reply, Products: matchedProducts})
 			return
 		}
@@ -753,17 +754,17 @@ func ChatHandlerWithAuth(catalog *models.Catalog, store *CartStore, live *LiveCa
 				"Звоните: 📞 +7 (727) 346-88-88"
 			reply = appendAvailabilityFacts(reply, req.Message, contextProducts)
 			reply = appendAnalogFacts(reply, unavailable, analogs)
-			conversations.append(sessionID, req.Message, reply, contextProducts)
+			conversations.append(cartKey, req.Message, reply, contextProducts)
 			writeJSON(w, models.ChatResponse{Reply: reply, Products: matchedProducts, Analogs: productResultsFromProducts(analogs)})
 			return
 		}
 
 		client := openai.NewClient(apiKey)
-		history, _ := conversations.get(sessionID)
+		history, _ := conversations.get(cartKey)
 		messages := []openai.ChatCompletionMessage{{Role: openai.ChatMessageRoleSystem, Content: buildSystemPrompt(catalog, contextProducts)}}
 		messages = append(messages, history...)
 		messages = append(messages, openai.ChatCompletionMessage{Role: openai.ChatMessageRoleUser, Content: req.Message})
-		first, err := createCompletion(r.Context(), client, messages)
+		first, err := createCompletion(r.Context(), client, messages, nil, nil)
 		if err != nil || len(first.Choices) == 0 {
 			reply := appendAnalogFacts("😔 AI-ассистент временно недоступен. Попробуйте через несколько секунд или позвоните нам: 📞 +7 (727) 346-88-88", unavailable, analogs)
 			writeJSON(w, models.ChatResponse{Reply: reply, Products: matchedProducts, Analogs: productResultsFromProducts(analogs)})
@@ -773,11 +774,10 @@ func ChatHandlerWithAuth(catalog *models.Catalog, store *CartStore, live *LiveCa
 		reply := first.Choices[0].Message.Content
 		reply = appendAvailabilityFacts(reply, req.Message, contextProducts)
 		reply = appendAnalogFacts(reply, unavailable, analogs)
-		conversations.append(sessionID, req.Message, reply, contextProducts)
+		conversations.append(cartKey, req.Message, reply, contextProducts)
 		writeJSON(w, models.ChatResponse{Reply: reply, Products: matchedProducts, Analogs: productResultsFromProducts(analogs)})
 	}
 }
-
 func liveSearchQuery(message string) string {
 	bestToken, bestScore := "", 0
 	for _, token := range catalogReferencePattern.FindAllString(message, -1) {
