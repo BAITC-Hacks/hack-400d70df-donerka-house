@@ -42,16 +42,17 @@ type Store struct {
 
 // ProductDetail represents detailed product information
 type ProductDetail struct {
-	ID          int                    `json:"id"`
-	Name        string                 `json:"name"`
-	Article     string                 `json:"article"`
-	Description string                 `json:"description"`
-	Price       float64                `json:"price"`
-	Quantity    int                    `json:"quantity"`
-	Stores      []Store                `json:"stores"`
-	Image       string                 `json:"image"`
-	URL         string                 `json:"url"`
-	Properties  map[string]interface{} `json:"properties"`
+	ID           int                    `json:"id"`
+	Name         string                 `json:"name"`
+	Article      string                 `json:"article"`
+	Description  string                 `json:"description"`
+	Price        float64                `json:"price"`
+	Quantity     int                    `json:"quantity"`
+	Stores       []Store                `json:"stores"`
+	Certificates []string               `json:"certificates,omitempty"`
+	Image        string                 `json:"image"`
+	URL          string                 `json:"url"`
+	Properties   map[string]interface{} `json:"properties"`
 }
 
 // Catalog holds all loaded product data for the AI context
