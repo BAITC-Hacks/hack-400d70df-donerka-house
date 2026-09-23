@@ -93,10 +93,14 @@ func validateCartQuantity(store *CartStore, sessionID string, product models.Pro
 	if strings.EqualFold(product.Availability, "Под заказ") {
 		return "Товар сейчас под заказ и не может быть добавлен в корзину как имеющийся в наличии."
 	}
-	if product.StockQuantity > 0 {
+	limit := product.StockQuantity
+	if limit <= 0 && product.TotalStockQuantity > 0 {
+		limit = product.TotalStockQuantity
+	}
+	if limit > 0 {
 		current := store.currentQuantity(sessionID, product.Article)
-		if current+quantity > product.StockQuantity {
-			return fmt.Sprintf("Доступно только %d шт. товара «%s». В корзине уже %d шт.", product.StockQuantity, product.Name, current)
+		if current+quantity > limit {
+			return fmt.Sprintf("Доступно только %d шт. товара «%s». В корзине уже %d шт.", limit, product.Name, current)
 		}
 	}
 	return ""
