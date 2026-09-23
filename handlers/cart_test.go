@@ -158,3 +158,86 @@ func TestPurchaseTermsAnswerIncludesMinimumBatch(t *testing.T) {
 		t.Fatalf("expected purchase terms with minimum batch, got %q", chat.Reply)
 	}
 }
+
+
+func TestFindAnalogsForUnavailableProduct(t *testing.T) {
+	target := models.Product{
+		ID:                 10,
+		Name:               "Автоматический выключатель Legrand 3P 80A",
+		Article:            "OUT-80A",
+		Availability:       "Нет в наличии",
+		TotalStockQuantity: 0,
+		Properties: map[string]string{
+			"Полюсов": "3",
+			"Ток":     "80 A",
+		},
+	}
+	analog := models.Product{
+		ID:                 11,
+		Name:               "Автоматический выключатель Schneider 3P 80A",
+		Article:            "ALT-80A",
+		Availability:       "В наличии",
+		StockQuantity:      6,
+		TotalStockQuantity: 6,
+		Properties: map[string]string{
+			"Полюсов": "3",
+			"Ток":     "80 A",
+		},
+	}
+	catalog := &models.Catalog{Products: []models.Product{target, analog}}
+
+	analogs := findAnalogs(catalog, target, 3)
+	if len(analogs) == 0 {
+		t.Fatal("expected at least one analog for unavailable product")
+	}
+	if analogs[0].Article != "ALT-80A" {
+		t.Fatalf("expected ALT-80A as analog, got %+v", analogs)
+	}
+	reason := analogReason(target, analogs[0])
+	if !strings.Contains(reason, "характерист") {
+		t.Fatalf("expected short analog explanation, got %q", reason)
+	}
+}
+
+func TestDemoChatSuggestsAnalogForUnavailableProduct(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "")
+	target := models.Product{
+		ID:                 10,
+		Name:               "Автоматический выключатель Legrand 3P 80A",
+		Article:            "OUT-80A",
+		Availability:       "Нет в наличии",
+		TotalStockQuantity: 0,
+		Properties: map[string]string{
+			"Полюсов": "3",
+			"Ток":     "80 A",
+		},
+	}
+	analog := models.Product{
+		ID:                 11,
+		Name:               "Автоматический выключатель Schneider 3P 80A",
+		Article:            "ALT-80A",
+		Availability:       "В наличии",
+		StockQuantity:      6,
+		Properties: map[string]string{
+			"Полюсов": "3",
+			"Ток":     "80 A",
+		},
+	}
+	catalog := &models.Catalog{Products: []models.Product{target, analog}}
+	handler := ChatHandler(catalog, NewCartStore(), nil, NewConversationStore())
+
+	response := doJSONRequest(handler, http.MethodPost, "/api/chat", []byte(`{"message":"OUT-80A"}`), nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", response.Code, response.Body.String())
+	}
+	var chat models.ChatResponse
+	if err := json.NewDecoder(response.Body).Decode(&chat); err != nil {
+		t.Fatal(err)
+	}
+	if len(chat.Analogs) == 0 || chat.Analogs[0].Article != "ALT-80A" {
+		t.Fatalf("expected analog in chat response, got %+v", chat.Analogs)
+	}
+	if !strings.Contains(chat.Reply, "Подходящие аналоги") {
+		t.Fatalf("expected analog explanation in reply, got %q", chat.Reply)
+	}
+}
