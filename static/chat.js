@@ -71,6 +71,11 @@ async function sendText(text) {
       if (data.products && data.products.length > 0) {
         appendProductCards(data.products);
       }
+
+      // Handle Add to Cart action from AI
+      if (data.cart_action) {
+        addToCart(data.cart_action);
+      }
     }
   } catch {
     removeTyping(typingId);
@@ -81,6 +86,53 @@ async function sendText(text) {
     scrollBottom();
     document.getElementById('chatInput').focus();
   }
+}
+
+// ==== CART MANAGEMENT ====
+let cart = [];
+
+function addToCart(action) {
+  const existing = cart.find(i => i.article === action.article);
+  if (existing) {
+    existing.quantity += action.quantity;
+  } else {
+    cart.push(action);
+  }
+  updateCartUI();
+  showToast(`✅ ${action.name} (x${action.quantity}) добавлен в корзину!`);
+}
+
+function updateCartUI() {
+  const count = cart.reduce((acc, i) => acc + i.quantity, 0);
+  const total = cart.reduce((acc, i) => acc + (i.price * i.quantity), 0);
+  
+  const countEl = document.getElementById('cartCount');
+  const totalEl = document.getElementById('cartTotal');
+  
+  if (countEl) countEl.textContent = count;
+  if (totalEl) totalEl.textContent = total.toLocaleString('ru-KZ') + ' тг';
+  
+  // Animate cart badge
+  if (countEl) {
+    countEl.style.transform = 'scale(1.5)';
+    setTimeout(() => { countEl.style.transform = 'scale(1)'; }, 200);
+  }
+}
+
+function showToast(msg) {
+  const container = document.getElementById('toastContainer');
+  if (!container) return;
+  
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.textContent = msg;
+  
+  container.appendChild(toast);
+  
+  setTimeout(() => {
+    toast.classList.add('hide');
+    setTimeout(() => toast.remove(), 300);
+  }, 4000);
 }
 
 // Append a plain text message bubble

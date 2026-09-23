@@ -46,8 +46,10 @@ const systemPromptBase = `Ты — умный AI-ассистент интерн
 2. Отвечать на вопросы о наличии, ценах, характеристиках
 3. Консультировать по выбору оборудования
 4. Направлять на нужные разделы сайта
+5. ОФОРМЛЕНИЕ ЗАКАЗА: Если клиент прямо говорит "добавь в корзину", "хочу купить", "беру" — ОБЯЗАТЕЛЬНО используй функцию add_to_cart для добавления товара.
 
 Важно:
+- Используй функцию add_to_cart СРАЗУ ЖЕ, когда клиент пишет "добавь в корзину артикул X" или "покупаю это". Не переспрашивай, если артикул или название понятны.
 - Все цены в тенге (тг / KZT)
 - Если клиент спрашивает конкретный товар — он будет показан отдельно карточками с фото, просто дай краткое текстовое описание
 - Отвечай на русском (или на языке клиента)
@@ -194,9 +196,35 @@ func ChatHandler(catalog *models.Catalog) http.HandlerFunc {
 		client := openai.NewClient(apiKey)
 		systemPrompt := buildSystemPrompt(catalog)
 
+		tools := []openai.Tool{
+			{
+				Type: openai.ToolTypeFunction,
+				Function: &openai.FunctionDefinition{
+					Name:        "add_to_cart",
+					Description: "Добавляет товар в корзину пользователя. Использовать ТОЛЬКО после явного согласия клиента.",
+					Parameters: map[string]interface{}{
+						"type": "object",
+						"properties": map[string]interface{}{
+							"article": map[string]interface{}{
+								"type":        "string",
+								"description": "Артикул товара",
+							},
+							"quantity": map[string]interface{}{
+								"type":        "integer",
+								"description": "Количество товара",
+							},
+						},
+						"required": []string{"article", "quantity"},
+					},
+				},
+			},
+		}
+
 		// Retry up to 3 times on OpenAI server errors
 		var reply string
+		var cartAction *models.CartAction
 		var lastErr error
+
 		for attempt := 1; attempt <= 3; attempt++ {
 			aiResp, err := client.CreateChatCompletion(r.Context(), openai.ChatCompletionRequest{
 				Model: "gpt-4o-mini",
@@ -204,26 +232,56 @@ func ChatHandler(catalog *models.Catalog) http.HandlerFunc {
 					{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
 					{Role: openai.ChatMessageRoleUser, Content: req.Message},
 				},
+				Tools:       tools,
 				MaxTokens:   500,
 				Temperature: 0.6,
 			})
 			if err == nil {
 				reply = aiResp.Choices[0].Message.Content
+				
+				// Handle tool call
+				if len(aiResp.Choices[0].Message.ToolCalls) > 0 {
+					for _, tc := range aiResp.Choices[0].Message.ToolCalls {
+						if tc.Function.Name == "add_to_cart" {
+							var args struct {
+								Article  string `json:"article"`
+								Quantity int    `json:"quantity"`
+							}
+							if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err == nil {
+								var p *models.Product
+								for _, prod := range catalog.Products {
+									if prod.Article == args.Article {
+										p = &prod
+										break
+									}
+								}
+								if p != nil {
+									cartAction = &models.CartAction{
+										Article:  p.Article,
+										Name:     p.Name,
+										Price:    p.Price,
+										Quantity: args.Quantity,
+									}
+									if reply == "" {
+										reply = fmt.Sprintf("✅ Отлично! Добавил \"%s\" (%d шт.) в корзину.", p.Name, args.Quantity)
+									}
+								}
+							}
+						}
+					}
+				}
+
 				lastErr = nil
 				break
 			}
 			lastErr = err
-			// Only retry on server-side errors (5xx), not client errors
-			if attempt < 3 && (strings.Contains(err.Error(), "500") ||
-				strings.Contains(err.Error(), "502") ||
-				strings.Contains(err.Error(), "503")) {
+			if attempt < 3 && (strings.Contains(err.Error(), "500") || strings.Contains(err.Error(), "502") || strings.Contains(err.Error(), "503")) {
 				continue
 			}
 			break
 		}
 
 		if lastErr != nil {
-			// Return a friendly fallback — still show matched products
 			friendlyMsg := "😔 AI-ассистент временно недоступен. Попробуйте через несколько секунд.\n\n" +
 				"Нашли подходящие товары по вашему запросу — нажмите на карточку для просмотра на ekt.kz.\n\n" +
 				"Или позвоните нам: 📞 +7 (727) 346-88-88"
@@ -235,8 +293,9 @@ func ChatHandler(catalog *models.Catalog) http.HandlerFunc {
 		}
 
 		json.NewEncoder(w).Encode(models.ChatResponse{
-			Reply:    reply,
-			Products: matchedProducts,
+			Reply:      reply,
+			Products:   matchedProducts,
+			CartAction: cartAction,
 		})
 	}
 }

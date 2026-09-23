@@ -61,10 +61,19 @@ type ProductResult struct {
 	URL     string  `json:"url"`
 }
 
-// ChatResponse is the AI reply + optional matched products
+// CartAction represents a directive to the frontend to add an item to the cart
+type CartAction struct {
+	Article  string  `json:"article"`
+	Name     string  `json:"name"`
+	Price    float64 `json:"price"`
+	Quantity int     `json:"quantity"`
+}
+
+// ChatResponse is the AI reply + optional matched products and cart actions
 type ChatResponse struct {
-	Reply    string          `json:"reply"`
-	Products []ProductResult `json:"products,omitempty"`
+	Reply      string          `json:"reply"`
+	Products   []ProductResult `json:"products,omitempty"`
+	CartAction *CartAction     `json:"cart_action,omitempty"`
 }
 
 // ErrorResponse is a standard error

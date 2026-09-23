@@ -51,10 +51,23 @@ button { font-family: inherit; cursor: pointer; }
 .search-bar input { flex: 1; padding: 10px 16px; border: none; font-size: 0.95rem; outline: none; font-family: inherit; }
 .search-btn { padding: 10px 18px; background: var(--primary); color: #fff; border: none; font-size: 1rem; transition: background .2s; }
 .search-btn:hover { background: var(--primary-dark); }
-.header-contacts { flex-shrink: 0; text-align: right; }
-.phone a { font-weight: 700; font-size: 1rem; color: var(--blue); }
-.phone a:hover { color: var(--primary); }
+.header-contacts { flex-shrink: 0; text-align: right; display: flex; align-items: center; gap: 20px; }
+.phone-block { text-align: right; }
+.phone-block a { font-weight: 700; font-size: 1rem; color: var(--blue); }
+.phone-block a:hover { color: var(--primary); }
 .phone-sub { font-size: 0.8rem; color: var(--text-muted); }
+.cart-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--gray-bg); padding: 8px 14px; border-radius: var(--radius); cursor: pointer; transition: all .2s; border: 1px solid var(--border); }
+.cart-btn:hover { border-color: var(--primary); background: #fff; box-shadow: var(--shadow); }
+.cart-icon { font-size: 1.2rem; position: relative; }
+.cart-badge { position: absolute; top: -6px; right: -8px; background: var(--primary); color: #fff; font-size: 0.7rem; font-weight: 700; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 2px solid #fff; }
+.cart-total { font-size: 0.8rem; font-weight: 700; color: var(--blue); margin-top: 2px; }
+
+/* ===== TOAST NOTIFICATION ===== */
+.toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; }
+.toast { background: #4ade80; color: #064e3b; padding: 12px 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); animation: slideInRight 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); display: flex; align-items: center; gap: 10px; font-weight: 500; font-size: 0.9rem; }
+.toast.hide { animation: fadeOutRight 0.3s ease forwards; }
+@keyframes slideInRight { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
+@keyframes fadeOutRight { from{transform:translateX(0);opacity:1} to{transform:translateX(100%);opacity:0} }
 
 /* ===== CATEGORY NAV ===== */
 .cat-nav { background: var(--blue); padding: 0; overflow-x: auto; }

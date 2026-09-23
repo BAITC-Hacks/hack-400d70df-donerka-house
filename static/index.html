@@ -52,11 +52,20 @@
       </div>
 
       <div class="header-contacts">
-        <div class="phone">📞 <a href="tel:+77273468888">+7 (727) 346-88-88</a></div>
-        <div class="phone-sub">+7 (778) 046-88-88</div>
+        <div class="phone-block">
+          <div class="phone">📞 <a href="tel:+77273468888">+7 (727) 346-88-88</a></div>
+          <div class="phone-sub">+7 (778) 046-88-88</div>
+        </div>
+        <div class="cart-btn" onclick="alert('Переход в корзину (B2B)')">
+          <div class="cart-icon">🛒<div class="cart-badge" id="cartCount">0</div></div>
+          <div class="cart-total" id="cartTotal">0 тг</div>
+        </div>
       </div>
     </div>
   </header>
+
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div id="toastContainer" class="toast-container"></div>
 
   <!-- NAV CATEGORIES -->
   <nav class="cat-nav">
