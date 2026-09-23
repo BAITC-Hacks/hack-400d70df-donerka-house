@@ -197,6 +197,9 @@ func applyProductDetail(product *models.Product, detail models.ProductDetail) {
 	if len(detail.Stores) > 0 {
 		product.Stores = append([]models.Store(nil), detail.Stores...)
 	}
+	if len(detail.Certificates) > 0 {
+		product.Certificates = append([]string(nil), detail.Certificates...)
+	}
 	if detail.Quantity > 0 {
 		product.Availability = "В наличии"
 	} else if product.Availability == "" {
