@@ -22,6 +22,7 @@ type Product struct {
 	StockLocation      string            `json:"stock_location,omitempty"`
 	TotalStockQuantity int               `json:"total_stock_quantity,omitempty"`
 	Stores             []Store           `json:"stores,omitempty"`
+	Certificates       []string          `json:"certificates,omitempty"`
 }
 
 // ProductsPage represents a paginated list of products
@@ -74,17 +75,69 @@ func (c *Catalog) AddProducts(products []Product) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	seen := make(map[string]struct{}, len(c.Products)+len(products))
-	for _, product := range c.Products {
-		seen[strings.ToLower(product.Article)+"|"+strings.ToLower(product.URL)] = struct{}{}
-	}
-	for _, product := range products {
-		key := strings.ToLower(product.Article) + "|" + strings.ToLower(product.URL)
-		if product.Name != "" && product.URL != "" {
-			if _, exists := seen[key]; !exists {
-				c.Products = append(c.Products, product)
-				seen[key] = struct{}{}
+
+	for _, incoming := range products {
+		if incoming.Name == "" {
+			continue
+		}
+
+		found := -1
+		for i := range c.Products {
+			sameID := incoming.ID != 0 && c.Products[i].ID == incoming.ID
+			sameArticle := incoming.Article != "" && strings.EqualFold(c.Products[i].Article, incoming.Article)
+			sameURL := incoming.URL != "" && strings.EqualFold(c.Products[i].URL, incoming.URL)
+			if sameID || sameArticle || sameURL {
+				found = i
+				break
 			}
+		}
+
+		if found == -1 {
+			c.Products = append(c.Products, incoming)
+			continue
+		}
+
+		current := &c.Products[found]
+		if incoming.Name != "" {
+			current.Name = incoming.Name
+		}
+		if incoming.Article != "" {
+			current.Article = incoming.Article
+		}
+		if incoming.Price > 0 {
+			current.Price = incoming.Price
+		}
+		if incoming.Image != "" {
+			current.Image = incoming.Image
+		}
+		if incoming.URL != "" {
+			current.URL = incoming.URL
+		}
+		if incoming.URLAPIDetail != "" {
+			current.URLAPIDetail = incoming.URLAPIDetail
+		}
+		if incoming.Description != "" {
+			current.Description = incoming.Description
+		}
+		if incoming.Properties != nil {
+			current.Properties = incoming.Properties
+		}
+		if incoming.Source != "" {
+			current.Source = incoming.Source
+		}
+		if incoming.Availability != "" {
+			current.Availability = incoming.Availability
+			current.StockQuantity = incoming.StockQuantity
+		}
+		if incoming.StockLocation != "" {
+			current.StockLocation = incoming.StockLocation
+		}
+		if incoming.TotalStockQuantity > 0 || len(incoming.Stores) > 0 {
+			current.TotalStockQuantity = incoming.TotalStockQuantity
+			current.Stores = append([]Store(nil), incoming.Stores...)
+		}
+		if len(incoming.Certificates) > 0 {
+			current.Certificates = append([]string(nil), incoming.Certificates...)
 		}
 	}
 }
@@ -116,6 +169,7 @@ type ProductResult struct {
 	StockLocation      string            `json:"stock_location,omitempty"`
 	TotalStockQuantity int               `json:"total_stock_quantity,omitempty"`
 	Stores             []Store           `json:"stores,omitempty"`
+	Certificates       []string          `json:"certificates,omitempty"`
 }
 
 // CartAction represents a directive to the frontend to add an item to the cart
@@ -173,8 +227,10 @@ type CartRequest struct {
 type ChatResponse struct {
 	Reply      string          `json:"reply"`
 	Products   []ProductResult `json:"products,omitempty"`
+	Analogs    []ProductResult `json:"analogs,omitempty"`
 	CartAction *CartAction     `json:"cart_action,omitempty"`
 	Cart       *CartResponse   `json:"cart,omitempty"`
+	CartURL    string          `json:"cart_url,omitempty"`
 }
 
 // ErrorResponse is a standard error
