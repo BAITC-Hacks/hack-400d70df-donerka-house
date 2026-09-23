@@ -29,6 +29,7 @@ func TestParseLiveCardAndDetail(t *testing.T) {
 <div class="detail_info__price__site__value">29 990 ₸</div>
 <div class="tab_item_chars__item"><div class="tab_item_chars__item__name">Диапазон:</div><div class="tab_item_chars__item__value">6-16 мм²</div></div>
 <div class="detail_info__buttons"><a data-action="add2basketPreOrder"><span>Под заказ</span></a></div>
+<a href="/upload/certificates/test-certificate.pdf">Сертификат соответствия</a>
 <div class="select-city__block__text-city">Астана</div>`
 	detailRoot, err := html.Parse(strings.NewReader(detailHTML))
 	if err != nil {
@@ -37,6 +38,9 @@ func TestParseLiveCardAndDetail(t *testing.T) {
 	parseLiveDetail(&product, detailRoot)
 	if product.Description != "Используется для снятия изоляции." || product.Properties["Диапазон"] != "6-16 мм²" || product.Availability != "Под заказ" || product.StockLocation != "Астана" {
 		t.Fatalf("unexpected parsed detail: %+v", product)
+	}
+	if len(product.Certificates) != 1 || product.Certificates[0] != "https://nursultan.ekt.kz/upload/certificates/test-certificate.pdf" {
+		t.Fatalf("expected certificate link, got %+v", product.Certificates)
 	}
 }
 
