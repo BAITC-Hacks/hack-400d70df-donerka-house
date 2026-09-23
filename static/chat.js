@@ -85,7 +85,11 @@ function appendMsg(text, role) {
 
   const bubble = document.createElement('div');
   bubble.className = 'msg-bubble';
-  bubble.innerHTML = text.replace(/\n/g, '<br/>');
+  // Keep model output as text. Do not inject it through innerHTML.
+  String(text ?? '').split('\n').forEach((line, index) => {
+    if (index > 0) bubble.appendChild(document.createElement('br'));
+    bubble.appendChild(document.createTextNode(line));
+  });
 
   const time = document.createElement('div');
   time.className = 'msg-time';
@@ -132,3 +136,4 @@ document.addEventListener('click', e => {
     toggleChat();
   }
 });
+
