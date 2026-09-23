@@ -194,24 +194,48 @@ func ChatHandler(catalog *models.Catalog) http.HandlerFunc {
 		client := openai.NewClient(apiKey)
 		systemPrompt := buildSystemPrompt(catalog)
 
-		aiResp, err := client.CreateChatCompletion(r.Context(), openai.ChatCompletionRequest{
-			Model: "gpt-4o-mini",
-			Messages: []openai.ChatCompletionMessage{
-				{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
-				{Role: openai.ChatMessageRoleUser, Content: req.Message},
-			},
-			MaxTokens:   500,
-			Temperature: 0.6,
-		})
+		// Retry up to 3 times on OpenAI server errors
+		var reply string
+		var lastErr error
+		for attempt := 1; attempt <= 3; attempt++ {
+			aiResp, err := client.CreateChatCompletion(r.Context(), openai.ChatCompletionRequest{
+				Model: "gpt-4o-mini",
+				Messages: []openai.ChatCompletionMessage{
+					{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
+					{Role: openai.ChatMessageRoleUser, Content: req.Message},
+				},
+				MaxTokens:   500,
+				Temperature: 0.6,
+			})
+			if err == nil {
+				reply = aiResp.Choices[0].Message.Content
+				lastErr = nil
+				break
+			}
+			lastErr = err
+			// Only retry on server-side errors (5xx), not client errors
+			if attempt < 3 && (strings.Contains(err.Error(), "500") ||
+				strings.Contains(err.Error(), "502") ||
+				strings.Contains(err.Error(), "503")) {
+				continue
+			}
+			break
+		}
 
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(models.ErrorResponse{Error: "AI error: " + err.Error()})
+		if lastErr != nil {
+			// Return a friendly fallback — still show matched products
+			friendlyMsg := "😔 AI-ассистент временно недоступен. Попробуйте через несколько секунд.\n\n" +
+				"Нашли подходящие товары по вашему запросу — нажмите на карточку для просмотра на ekt.kz.\n\n" +
+				"Или позвоните нам: 📞 +7 (727) 346-88-88"
+			json.NewEncoder(w).Encode(models.ChatResponse{
+				Reply:    friendlyMsg,
+				Products: matchedProducts,
+			})
 			return
 		}
 
 		json.NewEncoder(w).Encode(models.ChatResponse{
-			Reply:    aiResp.Choices[0].Message.Content,
+			Reply:    reply,
 			Products: matchedProducts,
 		})
 	}
