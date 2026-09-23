@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"fmt"
 	"sync"
 
 	"github.com/BAITC-Hacks/hack-400d70df-donerka-house/models"
@@ -76,6 +77,31 @@ func (s *CartStore) snapshot(sessionID string) models.CartResponse {
 	return response
 }
 
+func (s *CartStore) currentQuantity(sessionID, article string) int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if items := s.carts[sessionID]; items != nil {
+		return items[article].Quantity
+	}
+	return 0
+}
+
+func validateCartQuantity(store *CartStore, sessionID string, product models.Product, quantity int) string {
+	if quantity < 1 || quantity > maxCartQuantity {
+		return "Количество должно быть от 1 до 999."
+	}
+	if strings.EqualFold(product.Availability, "Под заказ") {
+		return "Товар сейчас под заказ и не может быть добавлен в корзину как имеющийся в наличии."
+	}
+	if product.StockQuantity > 0 {
+		current := store.currentQuantity(sessionID, product.Article)
+		if current+quantity > product.StockQuantity {
+			return fmt.Sprintf("Доступно только %d шт. товара «%s». В корзине уже %d шт.", product.StockQuantity, product.Name, current)
+		}
+	}
+	return ""
+}
+
 func (s *CartStore) add(sessionID string, product models.Product, quantity int) models.CartResponse {
 	s.mu.Lock()
 	if s.carts[sessionID] == nil {
@@ -122,13 +148,13 @@ func CartHandler(catalog *models.Catalog, store *CartStore) http.HandlerFunc {
 				writeJSONError(w, http.StatusBadRequest, "Invalid cart request")
 				return
 			}
-			if req.Quantity < 1 || req.Quantity > maxCartQuantity {
-				writeJSONError(w, http.StatusBadRequest, "Quantity must be between 1 and 999")
-				return
-			}
 			product := findProductByReference(catalog, req.Article)
 			if product == nil {
 				writeJSONError(w, http.StatusNotFound, "Product was not found in the catalog")
+				return
+			}
+			if message := validateCartQuantity(store, sessionID, *product, req.Quantity); message != "" {
+				writeJSONError(w, http.StatusBadRequest, message)
 				return
 			}
 			writeJSON(w, store.add(sessionID, *product, req.Quantity))
