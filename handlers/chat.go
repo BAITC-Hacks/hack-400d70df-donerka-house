@@ -425,83 +425,12 @@ func cartAction(product *models.Product, quantity int) *models.CartAction {
 	}
 }
 
-func addToCartFromMessage(catalog *models.Catalog, store *CartStore, sessionID, message string, contextProducts ...[]models.Product) (*models.CartAction, *models.CartResponse, string) {
-	if !hasAddIntent(message) {
-		return nil, nil, ""
-	}
-	quantity := requestedQuantity(message)
-	if quantity < 1 || quantity > maxCartQuantity {
-		return nil, nil, "Количество должно быть от 1 до 999."
-	}
-	product := inferProductForAdd(catalog, message, contextProducts...)
-	if product == nil {
-		return nil, nil, "Уточните артикул или выберите один товар из карточек, чтобы я добавил его в корзину."
-	}
-	cart := store.add(sessionID, *product, quantity)
-	return cartAction(product, quantity), &cart, fmt.Sprintf("✅ Добавил «%s» (%d шт.) в корзину.", product.Name, quantity)
-}
-
-func addToCartFromTool(catalog *models.Catalog, store *CartStore, sessionID, userMessage string, arguments string, contextProducts ...[]models.Product) (*models.CartAction, *models.CartResponse, map[string]any) {
-	var args models.CartRequest
-	if err := json.Unmarshal([]byte(arguments), &args); err != nil {
-		return nil, nil, map[string]any{"ok": false, "error": "invalid_arguments"}
-	}
-	if !hasAddIntent(userMessage) {
-		return nil, nil, map[string]any{"ok": false, "error": "explicit_customer_consent_required"}
-	}
-	if args.Quantity < 1 || args.Quantity > maxCartQuantity {
-		return nil, nil, map[string]any{"ok": false, "error": "quantity_must_be_between_1_and_999"}
-	}
-	product := findProductByReference(catalog, args.Article)
-	if product == nil && len(contextProducts) > 0 {
-		product = selectedProductFromContext(userMessage, contextProducts[0])
-	}
-	if product == nil {
-		return nil, nil, map[string]any{"ok": false, "error": "product_not_found"}
-	}
-	cart := store.add(sessionID, *product, args.Quantity)
-	action := cartAction(product, args.Quantity)
-	return action, &cart, map[string]any{
-		"ok":       true,
-		"article":  product.Article,
-		"name":     product.Name,
-		"quantity": args.Quantity,
-	}
-}
-
-func addToCartTool() openai.Tool {
-	return openai.Tool{
-		Type: openai.ToolTypeFunction,
-		Function: &openai.FunctionDefinition{
-			Name:        "add_to_cart",
-			Description: "Adds one catalog product to the current user's cart after the customer clearly chooses it. Do not ask for a second confirmation after phrases such as 'I will take this', 'the first one', or 'add it'. The server validates the article and quantity.",
-			Parameters: map[string]any{
-				"type":                 "object",
-				"additionalProperties": false,
-				"properties": map[string]any{
-					"article": map[string]any{
-						"type":        "string",
-						"description": "Exact catalog article from the catalog context, including a trailing underscore when present.",
-					},
-					"quantity": map[string]any{
-						"type":        "integer",
-						"description": "Positive quantity from 1 to 999.",
-					},
-				},
-				"required": []string{"article", "quantity"},
-			},
-		},
-	}
-}
-
-func createCompletion(ctx context.Context, client *openai.Client, messages []openai.ChatCompletionMessage, tools []openai.Tool, toolChoice any) (openai.ChatCompletionResponse, error) {
+func createCompletion(ctx context.Context, client *openai.Client, messages []openai.ChatCompletionMessage) (openai.ChatCompletionResponse, error) {
 	request := openai.ChatCompletionRequest{
 		Model:       "gpt-4o-mini",
 		Messages:    messages,
-		Tools:       tools,
-		ToolChoice:  toolChoice,
 		MaxTokens:   500,
-		Temperature: 0.6,
+		Temperature: 0.4,
 	}
 	var response openai.ChatCompletionResponse
 	var err error
@@ -830,7 +759,7 @@ func ChatHandler(catalog *models.Catalog, store *CartStore, live *LiveCatalog, c
 		messages := []openai.ChatCompletionMessage{{Role: openai.ChatMessageRoleSystem, Content: buildSystemPrompt(catalog, contextProducts)}}
 		messages = append(messages, history...)
 		messages = append(messages, openai.ChatCompletionMessage{Role: openai.ChatMessageRoleUser, Content: req.Message})
-		first, err := createCompletion(r.Context(), client, messages, nil, nil)
+		first, err := createCompletion(r.Context(), client, messages)
 		if err != nil || len(first.Choices) == 0 {
 			reply := appendAnalogFacts("😔 AI-ассистент временно недоступен. Попробуйте через несколько секунд или позвоните нам: 📞 +7 (727) 346-88-88", unavailable, analogs)
 			writeJSON(w, models.ChatResponse{Reply: reply, Products: matchedProducts, Analogs: productResultsFromProducts(analogs)})
