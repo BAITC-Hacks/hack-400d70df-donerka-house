@@ -50,7 +50,8 @@ type ProductDetail struct {
 	Stores      []Store                `json:"stores"`
 	Image       string                 `json:"image"`
 	URL         string                 `json:"url"`
-	Properties  map[string]interface{} `json:"properties"`
+	Properties   map[string]interface{} `json:"properties"`
+	Certificates []string               `json:"certificates,omitempty"`
 }
 
 // Catalog holds all loaded product data for the AI context
@@ -151,8 +152,10 @@ type CartRequest struct {
 type ChatResponse struct {
 	Reply      string          `json:"reply"`
 	Products   []ProductResult `json:"products,omitempty"`
+	Analogs    []ProductResult `json:"analogs,omitempty"`
 	CartAction *CartAction     `json:"cart_action,omitempty"`
 	Cart       *CartResponse   `json:"cart,omitempty"`
+	CartURL    string          `json:"cart_url,omitempty"`
 }
 
 // ErrorResponse is a standard error
