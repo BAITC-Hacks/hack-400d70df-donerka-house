@@ -209,6 +209,45 @@ func parseLiveDetail(product *models.Product, root *htmlnode.Node) {
 			product.Article = article
 		}
 	}
+
+	product.Certificates = parseLiveCertificates(product.Source, root)
+}
+
+func parseLiveCertificates(baseURL string, root *htmlnode.Node) []string {
+	if root == nil {
+		return nil
+	}
+	result := make([]string, 0, 4)
+	seen := make(map[string]struct{})
+
+	walk(root, func(node *htmlnode.Node) {
+		if node.Type != htmlnode.ElementNode || node.Data != "a" {
+			return
+		}
+		href := strings.TrimSpace(attr(node, "href"))
+		if href == "" {
+			return
+		}
+		label := strings.ToLower(cleanText(textContent(node)))
+		hrefLower := strings.ToLower(href)
+		isCertificate := strings.Contains(label, "сертифик") ||
+			strings.Contains(label, "certificate") ||
+			strings.Contains(hrefLower, "sertifikat") ||
+			strings.Contains(hrefLower, "certificate")
+		if !isCertificate {
+			return
+		}
+		link := absoluteURL(baseURL, href)
+		if link == "" {
+			return
+		}
+		if _, exists := seen[link]; exists {
+			return
+		}
+		seen[link] = struct{}{}
+		result = append(result, link)
+	})
+	return result
 }
 
 // parseLiveAvailability reads the availability controls rendered by EKT's

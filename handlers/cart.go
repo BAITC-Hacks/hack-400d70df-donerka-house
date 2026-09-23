@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sort"
 	"strings"
@@ -129,6 +130,35 @@ func (s *CartStore) snapshot(sessionID string) models.CartResponse {
 	return response
 }
 
+func (s *CartStore) currentQuantity(cartKey, article string) int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if items := s.carts[cartKey]; items != nil {
+		return items[article].Quantity
+	}
+	return 0
+}
+
+func validateCartQuantity(store *CartStore, cartKey string, product models.Product, quantity int) string {
+	if quantity < 1 || quantity > maxCartQuantity {
+		return "Количество должно быть от 1 до 999."
+	}
+	if strings.EqualFold(product.Availability, "Под заказ") || strings.EqualFold(product.Availability, "Нет в наличии") {
+		return "Товар сейчас недоступен для добавления в корзину."
+	}
+	limit := product.StockQuantity
+	if limit <= 0 && product.TotalStockQuantity > 0 {
+		limit = product.TotalStockQuantity
+	}
+	if limit > 0 {
+		current := store.currentQuantity(cartKey, product.Article)
+		if current+quantity > limit {
+			return fmt.Sprintf("Доступно только %d шт. товара «%s». В корзине уже %d шт.", limit, product.Name, current)
+		}
+	}
+	return ""
+}
+
 func (s *CartStore) add(sessionID string, product models.Product, quantity int) models.CartResponse {
 	s.mu.Lock()
 	if s.carts[sessionID] == nil {
@@ -176,22 +206,7 @@ func CartHandlerWithAuth(catalog *models.Catalog, store *CartStore, auth *AuthSt
 		case http.MethodGet:
 			writeJSON(w, store.snapshot(cartKey))
 		case http.MethodPost:
-			var req models.CartRequest
-			decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10))
-			if err := decoder.Decode(&req); err != nil {
-				writeJSONError(w, http.StatusBadRequest, "Invalid cart request")
-				return
-			}
-			if req.Quantity < 1 || req.Quantity > maxCartQuantity {
-				writeJSONError(w, http.StatusBadRequest, "Quantity must be between 1 and 999")
-				return
-			}
-			product := findProductByReference(catalog, req.Article)
-			if product == nil {
-				writeJSONError(w, http.StatusNotFound, "Product was not found in the catalog")
-				return
-			}
-			writeJSON(w, store.add(cartKey, *product, req.Quantity))
+			writeJSONError(w, http.StatusConflict, "Добавление в корзину доступно только через подтверждённый сценарий чата: выберите товар и количество, затем отправьте «да, добавь».")
 		case http.MethodDelete:
 			article := strings.TrimSpace(r.URL.Query().Get("article"))
 			writeJSON(w, store.remove(cartKey, article))

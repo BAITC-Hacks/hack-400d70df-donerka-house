@@ -44,11 +44,12 @@ func TestAccountOwnsCartAcrossLogoutAndLogin(t *testing.T) {
 	authHandler := AuthHandler(auth, carts)
 	cartHandler := CartHandlerWithAuth(catalog, carts, auth)
 
-	guestAdd := requestWithCookies(cartHandler, http.MethodPost, "/api/cart", []byte(`{"article":"027228","quantity":2}`))
-	if guestAdd.Code != http.StatusOK {
-		t.Fatalf("guest add status = %d", guestAdd.Code)
+	guestCart := requestWithCookies(cartHandler, http.MethodGet, "/api/cart", nil)
+	if guestCart.Code != http.StatusOK {
+		t.Fatalf("guest cart status = %d", guestCart.Code)
 	}
-	session := cookieByName(t, guestAdd, sessionCookieName)
+	session := cookieByName(t, guestCart, sessionCookieName)
+	carts.add(session.Value, catalog.Products[0], 2)
 
 	register := requestWithCookies(authHandler, http.MethodPost, "/api/auth", []byte(`{"action":"register","email":"buyer@example.com","name":"Buyer","password":"password123"}`), session)
 	if register.Code != http.StatusOK {
