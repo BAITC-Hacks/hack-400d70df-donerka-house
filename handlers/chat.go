@@ -91,7 +91,7 @@ func buildSystemPrompt(catalog *models.Catalog, relevant ...[]models.Product) st
 	}
 
 	if len(relevant) > 0 && len(relevant[0]) > 0 {
-		prompt += "\n## Актуальные товары и сведения с публичного сайта nursultan.ekt.kz:\n"
+		prompt += "\n## Актуальные товары и сведения EKT (API/региональная страница):\n"
 		for index, product := range relevant[0] {
 			prompt += fmt.Sprintf("%d. [Арт: %s] %s — %.0f тг\n", index+1, product.Article, product.Name, product.Price)
 			if product.Availability != "" {
@@ -103,6 +103,14 @@ func buildSystemPrompt(catalog *models.Catalog, relevant ...[]models.Product) st
 					prompt += "; регион: " + product.StockLocation
 				}
 				prompt += "\n"
+			}
+			if product.TotalStockQuantity > 0 {
+				prompt += fmt.Sprintf("   Общий остаток по API EKT: %d шт.\n", product.TotalStockQuantity)
+			}
+			for _, store := range product.Stores {
+				if store.Quantity > 0 {
+					prompt += fmt.Sprintf("   Склад: %s — %d шт.\n", store.Name, store.Quantity)
+				}
 			}
 			if product.Description != "" {
 				prompt += "   Описание и назначение: " + product.Description + "\n"
@@ -184,18 +192,20 @@ func searchProducts(catalog *models.Catalog, query string, limit int) []models.P
 			break
 		}
 		out = append(out, models.ProductResult{
-			ID:            result.p.ID,
-			Name:          result.p.Name,
-			Article:       result.p.Article,
-			Price:         result.p.Price,
-			Image:         result.p.Image,
-			URL:           result.p.URL,
-			Description:   result.p.Description,
-			Properties:    result.p.Properties,
-			Source:        result.p.Source,
-			Availability:  result.p.Availability,
-			StockQuantity: result.p.StockQuantity,
-			StockLocation: result.p.StockLocation,
+			ID:                 result.p.ID,
+			Name:               result.p.Name,
+			Article:            result.p.Article,
+			Price:              result.p.Price,
+			Image:              result.p.Image,
+			URL:                result.p.URL,
+			Description:        result.p.Description,
+			Properties:         result.p.Properties,
+			Source:             result.p.Source,
+			Availability:       result.p.Availability,
+			StockQuantity:      result.p.StockQuantity,
+			StockLocation:      result.p.StockLocation,
+			TotalStockQuantity: result.p.TotalStockQuantity,
+			Stores:             result.p.Stores,
 		})
 	}
 	return out
@@ -439,26 +449,32 @@ func productResultsFromProducts(products []models.Product) []models.ProductResul
 	results := make([]models.ProductResult, 0, len(products))
 	for _, product := range products {
 		results = append(results, models.ProductResult{
-			ID:            product.ID,
-			Name:          product.Name,
-			Article:       product.Article,
-			Price:         product.Price,
-			Image:         product.Image,
-			URL:           product.URL,
-			Description:   product.Description,
-			Properties:    product.Properties,
-			Source:        product.Source,
-			Availability:  product.Availability,
-			StockQuantity: product.StockQuantity,
-			StockLocation: product.StockLocation,
+			ID:                 product.ID,
+			Name:               product.Name,
+			Article:            product.Article,
+			Price:              product.Price,
+			Image:              product.Image,
+			URL:                product.URL,
+			Description:        product.Description,
+			Properties:         product.Properties,
+			Source:             product.Source,
+			Availability:       product.Availability,
+			StockQuantity:      product.StockQuantity,
+			StockLocation:      product.StockLocation,
+			TotalStockQuantity: product.TotalStockQuantity,
+			Stores:             product.Stores,
 		})
 	}
 	return results
 }
 
 // ChatHandler handles POST /api/chat.
-func ChatHandler(catalog *models.Catalog, store *CartStore, live *LiveCatalog, conversations *ConversationStore) http.HandlerFunc {
+func ChatHandler(catalog *models.Catalog, store *CartStore, live *LiveCatalog, conversations *ConversationStore, ektAPIs ...*EKTAPI) http.HandlerFunc {
 	apiKey := os.Getenv("OPENAI_API_KEY")
+	var ektAPI *EKTAPI
+	if len(ektAPIs) > 0 {
+		ektAPI = ektAPIs[0]
+	}
 	if conversations == nil {
 		conversations = NewConversationStore()
 	}
@@ -489,6 +505,11 @@ func ChatHandler(catalog *models.Catalog, store *CartStore, live *LiveCatalog, c
 			liveProducts, _ = live.Search(liveContext, liveSearchQuery(req.Message))
 			liveProducts = live.Enrich(liveContext, liveProducts)
 			cancel()
+			if ektAPI != nil && ektAPI.Enabled() && len(liveProducts) > 0 {
+				apiContext, apiCancel := context.WithTimeout(r.Context(), 6*time.Second)
+				liveProducts = ektAPI.Enrich(apiContext, liveProducts)
+				apiCancel()
+			}
 			catalog.AddProducts(liveProducts)
 		}
 		contextProducts := uniqueProducts(liveProducts, recentProducts)
@@ -503,6 +524,12 @@ func ChatHandler(catalog *models.Catalog, store *CartStore, live *LiveCatalog, c
 		}
 		if len(contextProducts) == 0 {
 			contextProducts = productsForResults(catalog, matchedProducts)
+		}
+		if ektAPI != nil && ektAPI.Enabled() && len(liveProducts) == 0 && len(contextProducts) > 0 {
+			apiContext, apiCancel := context.WithTimeout(r.Context(), 6*time.Second)
+			contextProducts = ektAPI.Enrich(apiContext, contextProducts)
+			apiCancel()
+			matchedProducts = productResultsFromProducts(contextProducts)
 		}
 
 		// Explicit purchase language is already customer consent. Resolve and

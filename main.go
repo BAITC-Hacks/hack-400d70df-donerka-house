@@ -1,20 +1,23 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/BAITC-Hacks/hack-400d70df-donerka-house/handlers"
 	"github.com/BAITC-Hacks/hack-400d70df-donerka-house/models"
 )
 
-func loadCatalog() (*models.Catalog, error) {
+func loadCatalog(api *handlers.EKTAPI) (*models.Catalog, error) {
 	catalog := &models.Catalog{}
-
-	// Load products from both files and merge
+	// Start immediately from the local snapshot. The authenticated EKT catalog
+	// is synchronized in the background below so a large paginated catalog
+	// cannot block the web server from starting.
 	files := []string{"data/products.json", "data/products2.json"}
 	seen := map[int]bool{}
 
@@ -48,6 +51,20 @@ func loadCatalog() (*models.Catalog, error) {
 		}
 	}
 
+	if api != nil && api.Enabled() {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+			defer cancel()
+			products, err := api.LoadProducts(ctx)
+			if err != nil {
+				log.Printf("⚠️ Authenticated EKT catalog sync failed: %v", err)
+				return
+			}
+			catalog.AddProducts(products)
+			log.Printf("✅ Authenticated EKT catalog sync complete: %d products", len(products))
+		}()
+	}
+
 	log.Printf("📦 Total products in catalog: %d", len(catalog.Products))
 	return catalog, nil
 }
@@ -71,7 +88,12 @@ func main() {
 		port = "8080"
 	}
 
-	catalog, err := loadCatalog()
+	ektAPI := handlers.NewEKTAPI(
+		os.Getenv("EKT_API_BASE_URL"),
+		os.Getenv("EKT_API_USERNAME"),
+		os.Getenv("EKT_API_PASSWORD"),
+	)
+	catalog, err := loadCatalog(ektAPI)
 	if err != nil {
 		log.Fatalf("Failed to load catalog: %v", err)
 	}
@@ -80,6 +102,11 @@ func main() {
 		log.Println("⚠️  OPENAI_API_KEY not set — demo mode active")
 	} else {
 		log.Println("✅ OpenAI API key configured")
+	}
+	if ektAPI.Enabled() {
+		log.Println("✅ Authenticated EKT API configured")
+	} else {
+		log.Println("⚠️ EKT API credentials not set — local snapshot/live HTML mode active")
 	}
 
 	mux := http.NewServeMux()
@@ -92,7 +119,7 @@ func main() {
 
 	// API
 	mux.HandleFunc("/api/catalog", handlers.CatalogHandler(catalog))
-	mux.HandleFunc("/api/chat", handlers.ChatHandler(catalog, cartStore, liveCatalog, conversationStore))
+	mux.HandleFunc("/api/chat", handlers.ChatHandler(catalog, cartStore, liveCatalog, conversationStore, ektAPI))
 	mux.HandleFunc("/api/cart", handlers.CartHandler(catalog, cartStore))
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

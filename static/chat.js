@@ -301,6 +301,8 @@ function appendProductCards(products) {
       stock.textContent = product.availability;
       if (product.stock_quantity > 0) {
         stock.textContent += ` · до ${product.stock_quantity} шт.`;
+      } else if (product.total_stock_quantity > 0) {
+        stock.textContent += ` · всего ${product.total_stock_quantity} шт.`;
       }
       if (product.stock_location) {
         stock.textContent += ` · ${product.stock_location}`;

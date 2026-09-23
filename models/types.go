@@ -7,19 +7,21 @@ import (
 
 // Product represents a single product from the catalog
 type Product struct {
-	ID            int               `json:"id"`
-	Name          string            `json:"name"`
-	Article       string            `json:"article"`
-	Price         float64           `json:"price"`
-	Image         string            `json:"image"`
-	URL           string            `json:"url"`
-	URLAPIDetail  string            `json:"url_api_detail"`
-	Description   string            `json:"description,omitempty"`
-	Properties    map[string]string `json:"properties,omitempty"`
-	Source        string            `json:"source,omitempty"`
-	Availability  string            `json:"availability,omitempty"`
-	StockQuantity int               `json:"stock_quantity,omitempty"`
-	StockLocation string            `json:"stock_location,omitempty"`
+	ID                 int               `json:"id"`
+	Name               string            `json:"name"`
+	Article            string            `json:"article"`
+	Price              float64           `json:"price"`
+	Image              string            `json:"image"`
+	URL                string            `json:"url"`
+	URLAPIDetail       string            `json:"url_api_detail"`
+	Description        string            `json:"description,omitempty"`
+	Properties         map[string]string `json:"properties,omitempty"`
+	Source             string            `json:"source,omitempty"`
+	Availability       string            `json:"availability,omitempty"`
+	StockQuantity      int               `json:"stock_quantity,omitempty"`
+	StockLocation      string            `json:"stock_location,omitempty"`
+	TotalStockQuantity int               `json:"total_stock_quantity,omitempty"`
+	Stores             []Store           `json:"stores,omitempty"`
 }
 
 // ProductsPage represents a paginated list of products
@@ -100,18 +102,20 @@ type ChatRequest struct {
 
 // ProductResult is a matched product returned alongside the AI reply
 type ProductResult struct {
-	ID            int               `json:"id"`
-	Name          string            `json:"name"`
-	Article       string            `json:"article"`
-	Price         float64           `json:"price"`
-	Image         string            `json:"image"`
-	URL           string            `json:"url"`
-	Description   string            `json:"description,omitempty"`
-	Properties    map[string]string `json:"properties,omitempty"`
-	Source        string            `json:"source,omitempty"`
-	Availability  string            `json:"availability,omitempty"`
-	StockQuantity int               `json:"stock_quantity,omitempty"`
-	StockLocation string            `json:"stock_location,omitempty"`
+	ID                 int               `json:"id"`
+	Name               string            `json:"name"`
+	Article            string            `json:"article"`
+	Price              float64           `json:"price"`
+	Image              string            `json:"image"`
+	URL                string            `json:"url"`
+	Description        string            `json:"description,omitempty"`
+	Properties         map[string]string `json:"properties,omitempty"`
+	Source             string            `json:"source,omitempty"`
+	Availability       string            `json:"availability,omitempty"`
+	StockQuantity      int               `json:"stock_quantity,omitempty"`
+	StockLocation      string            `json:"stock_location,omitempty"`
+	TotalStockQuantity int               `json:"total_stock_quantity,omitempty"`
+	Stores             []Store           `json:"stores,omitempty"`
 }
 
 // CartAction represents a directive to the frontend to add an item to the cart

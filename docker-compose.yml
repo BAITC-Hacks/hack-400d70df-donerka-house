@@ -9,6 +9,9 @@ services:
       - PORT=8080
       # Вставьте ваш OpenAI API Key здесь или создайте .env файл
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - EKT_API_BASE_URL=${EKT_API_BASE_URL:-https://ekt.kz/api}
+      - EKT_API_USERNAME=${EKT_API_USERNAME:-}
+      - EKT_API_PASSWORD=${EKT_API_PASSWORD:-}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
