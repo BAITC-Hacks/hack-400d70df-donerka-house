@@ -84,6 +84,14 @@ async function sendText(text) {
         appendProductCards(data.products);
       }
 
+      if (data.analogs && data.analogs.length > 0) {
+        appendProductCards(data.analogs, 'Подходящие аналоги');
+      }
+
+      if (data.cart_url) {
+        appendCartLink(data.cart_url);
+      }
+
       if (data.cart) {
         applyCart(data.cart);
       } else if (data.cart_action) {
@@ -370,10 +378,38 @@ function appendMsg(text, role) {
   scrollBottom();
 }
 
-function appendProductCards(products) {
+function appendCartLink(url) {
   const container = document.getElementById('chatMessages');
   const wrap = document.createElement('div');
   wrap.className = 'msg bot';
+  const link = document.createElement('a');
+  link.className = 'chat-product-link';
+  link.href = safeURL(url);
+  link.textContent = '🛒 Открыть актуальную корзину';
+  link.addEventListener('click', event => {
+    if (url === '/#cart' || url === '#cart') {
+      event.preventDefault();
+      history.replaceState(null, '', '#cart');
+      const panel = document.getElementById('cartPanel');
+      if (panel) panel.classList.add('open');
+    }
+  });
+  wrap.appendChild(link);
+  container.appendChild(wrap);
+  scrollBottom();
+}
+
+function appendProductCards(products, title = '') {
+  const container = document.getElementById('chatMessages');
+  const wrap = document.createElement('div');
+  wrap.className = 'msg bot';
+  if (title) {
+    const heading = document.createElement('div');
+    heading.className = 'chat-product-section-title';
+    heading.textContent = title;
+    wrap.appendChild(heading);
+  }
+
   const cardsWrap = document.createElement('div');
   cardsWrap.className = 'product-cards-row';
 
@@ -434,13 +470,29 @@ function appendProductCards(products) {
     addButton.type = 'button';
     addButton.className = 'chat-add-btn';
     addButton.textContent = 'В корзину';
-    addButton.addEventListener('click', () => addToCart({
-      article: product.article,
-      name: product.name,
-      quantity: 1,
-    }));
+    addButton.addEventListener('click', () => {
+      openChat();
+      sendText(`добавь 1 шт ${product.article}`);
+    });
+
     footer.append(price, link, addButton);
-    info.append(article, name, footer);
+    info.append(article, name);
+
+    if (Array.isArray(product.certificates) && product.certificates.length > 0) {
+      const certs = document.createElement('div');
+      certs.className = 'chat-product-certificates';
+      product.certificates.forEach((certificate, index) => {
+        const certLink = document.createElement('a');
+        certLink.href = safeURL(certificate);
+        certLink.target = '_blank';
+        certLink.rel = 'noopener noreferrer';
+        certLink.textContent = index === 0 ? '📄 Сертификат' : `📄 Сертификат ${index + 1}`;
+        certs.appendChild(certLink);
+      });
+      info.appendChild(certs);
+    }
+
+    info.appendChild(footer);
     card.append(imgWrap, info);
     cardsWrap.appendChild(card);
   });
@@ -477,9 +529,13 @@ function now() {
   return date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   loadAuth();
-  loadCart();
+  await loadCart();
+  if (window.location.hash === '#cart') {
+    const panel = document.getElementById('cartPanel');
+    if (panel) panel.classList.add('open');
+  }
 });
 
 document.addEventListener('click', event => {
