@@ -62,6 +62,32 @@ button { font-family: inherit; cursor: pointer; }
 .cart-badge { position: absolute; top: -6px; right: -8px; background: var(--primary); color: #fff; font-size: 0.7rem; font-weight: 700; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 2px solid #fff; }
 .cart-total { font-size: 0.8rem; font-weight: 700; color: var(--blue); margin-top: 2px; }
 
+/* ===== CART PANEL ===== */
+.cart-panel {
+  position: fixed; top: 92px; right: 20px; z-index: 300;
+  width: 390px; max-width: calc(100vw - 28px);
+  background: #fff; border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: 0 16px 50px rgba(0,0,0,.18); display: none;
+}
+.cart-panel.open { display: block; animation: slideUp .2s ease; }
+.cart-panel-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px; border-bottom: 1px solid var(--border); }
+.cart-panel-header h2 { color: var(--blue); font-size: 1.1rem; }
+.cart-close-btn { background: none; border: 0; color: var(--text-muted); font-size: 1rem; padding: 4px 8px; }
+.cart-items { max-height: 330px; overflow-y: auto; padding: 10px 14px; }
+.cart-empty { color: var(--text-muted); text-align: center; padding: 28px 8px; font-size: .9rem; }
+.cart-item { display: flex; justify-content: space-between; gap: 10px; padding: 10px 4px; border-bottom: 1px solid var(--border); }
+.cart-item-details { min-width: 0; }
+.cart-item-name { font-size: .82rem; font-weight: 600; line-height: 1.35; }
+.cart-item-meta { color: var(--text-muted); font-family: monospace; font-size: .7rem; margin-top: 3px; }
+.cart-item-controls { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; color: var(--primary); font-size: .8rem; font-weight: 700; white-space: nowrap; }
+.cart-remove-btn { background: none; border: 0; color: var(--text-muted); font-size: 1.1rem; line-height: 1; }
+.cart-remove-btn:hover, .cart-close-btn:hover { color: var(--primary); }
+.cart-panel-footer { padding: 14px 18px 16px; border-top: 1px solid var(--border); }
+.cart-panel-total-row { display: flex; justify-content: space-between; color: var(--blue); margin-bottom: 12px; }
+.cart-panel-total-row strong { color: var(--primary); }
+.cart-clear-btn, .cart-checkout-btn { width: 100%; justify-content: center; margin-top: 8px; }
+.cart-note { color: var(--text-muted); font-size: .7rem; margin-top: 10px; text-align: center; }
+
 /* ===== TOAST NOTIFICATION ===== */
 .toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; }
 .toast { background: #4ade80; color: #064e3b; padding: 12px 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); animation: slideInRight 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); display: flex; align-items: center; gap: 10px; font-weight: 500; font-size: 0.9rem; }
@@ -209,7 +235,7 @@ button { font-family: inherit; cursor: pointer; }
 .msg { display: flex; flex-direction: column; max-width: 88%; }
 .msg.bot { align-self: flex-start; }
 .msg.user { align-self: flex-end; align-items: flex-end; }
-.msg-bubble { padding: 10px 14px; border-radius: 16px; font-size: 0.88rem; line-height: 1.55; }
+.msg-bubble { padding: 10px 14px; border-radius: 16px; font-size: 0.88rem; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
 .msg.bot .msg-bubble { background: var(--gray-bg); border-bottom-left-radius: 4px; }
 .msg.user .msg-bubble { background: var(--primary); color: #fff; border-bottom-right-radius: 4px; }
 .msg-time { font-size: 0.7rem; color: var(--text-muted); margin-top: 3px; padding: 0 4px; }
@@ -353,4 +379,5 @@ button { font-family: inherit; cursor: pointer; }
   .chat-widget { right: 12px; bottom: 84px; width: calc(100vw - 24px); }
   .chat-bubble { right: 14px; bottom: 20px; width: 54px; height: 54px; font-size: 1.4rem; }
   .cat-nav .container { overflow-x: auto; padding-bottom: 2px; }
+  .cart-panel { top: 74px; right: 12px; }
 }

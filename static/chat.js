@@ -1,9 +1,20 @@
 // ===================== CHAT.JS — EKT.KZ AI Assistant =====================
 
 const API_CHAT = '/api/chat';
+const API_CART = '/api/cart';
 let isOpen = false;
 let isBusy = false;
 let chipsHidden = false;
+let cart = [];
+
+function safeURL(value) {
+  try {
+    const url = new URL(value || '#', window.location.origin);
+    return ['http:', 'https:'].includes(url.protocol) ? url.href : '#';
+  } catch {
+    return '#';
+  }
+}
 
 function toggleChat() {
   const widget = document.getElementById('chatWidget');
@@ -67,14 +78,18 @@ async function sendText(text) {
       const data = await res.json();
       appendMsg(data.reply || '...', 'bot');
 
-      // Render product cards if returned
       if (data.products && data.products.length > 0) {
         appendProductCards(data.products);
       }
 
-      // Handle Add to Cart action from AI
+      if (data.cart) {
+        applyCart(data.cart);
+      } else if (data.cart_action) {
+        // Backward-compatible fallback for an older backend response.
+        await addToCart(data.cart_action, false);
+      }
       if (data.cart_action) {
-        addToCart(data.cart_action);
+        showToast(`✅ ${data.cart_action.name} (x${data.cart_action.quantity}) добавлен в корзину!`);
       }
     }
   } catch {
@@ -89,141 +104,211 @@ async function sendText(text) {
 }
 
 // ==== CART MANAGEMENT ====
-let cart = [];
 
-function addToCart(action) {
-  const existing = cart.find(i => i.article === action.article);
-  if (existing) {
-    existing.quantity += action.quantity;
-  } else {
-    cart.push(action);
+async function loadCart() {
+  try {
+    const res = await fetch(API_CART);
+    if (res.ok) applyCart(await res.json());
+  } catch {
+    showToast('⚠️ Не удалось загрузить корзину');
   }
+}
+
+function applyCart(data) {
+  cart = Array.isArray(data.items) ? data.items : [];
   updateCartUI();
-  showToast(`✅ ${action.name} (x${action.quantity}) добавлен в корзину!`);
+  renderCartPanel();
+}
+
+async function addToCart(action, notify = true) {
+  try {
+    const res = await fetch(API_CART, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ article: action.article, quantity: action.quantity }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast('⚠️ ' + (data.error || 'Не удалось добавить товар'));
+      return false;
+    }
+    applyCart(data);
+    if (notify) showToast(`✅ ${action.name} (x${action.quantity}) добавлен в корзину!`);
+    return true;
+  } catch {
+    showToast('⚠️ Нет соединения с сервером');
+    return false;
+  }
+}
+
+async function removeCartItem(article) {
+  try {
+    const res = await fetch(`${API_CART}?article=${encodeURIComponent(article)}`, { method: 'DELETE' });
+    if (res.ok) applyCart(await res.json());
+  } catch {
+    showToast('⚠️ Не удалось изменить корзину');
+  }
+}
+
+async function clearCart() {
+  try {
+    const res = await fetch(API_CART, { method: 'DELETE' });
+    if (res.ok) applyCart(await res.json());
+  } catch {
+    showToast('⚠️ Не удалось очистить корзину');
+  }
+}
+
+function toggleCart() {
+  const panel = document.getElementById('cartPanel');
+  if (panel) panel.classList.toggle('open');
+}
+
+function closeCart() {
+  const panel = document.getElementById('cartPanel');
+  if (panel) panel.classList.remove('open');
 }
 
 function updateCartUI() {
-  const count = cart.reduce((acc, i) => acc + i.quantity, 0);
-  const total = cart.reduce((acc, i) => acc + (i.price * i.quantity), 0);
-  
+  const count = cart.reduce((acc, item) => acc + item.quantity, 0);
+  const total = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
   const countEl = document.getElementById('cartCount');
   const totalEl = document.getElementById('cartTotal');
-  
+  const panelTotalEl = document.getElementById('cartPanelTotal');
+
   if (countEl) countEl.textContent = count;
   if (totalEl) totalEl.textContent = total.toLocaleString('ru-KZ') + ' тг';
-  
-  // Animate cart badge
+  if (panelTotalEl) panelTotalEl.textContent = total.toLocaleString('ru-KZ') + ' тг';
+
   if (countEl) {
     countEl.style.transform = 'scale(1.5)';
     setTimeout(() => { countEl.style.transform = 'scale(1)'; }, 200);
   }
 }
 
+function renderCartPanel() {
+  const container = document.getElementById('cartItems');
+  const clearButton = document.getElementById('clearCartBtn');
+  if (!container) return;
+  container.textContent = '';
+  if (clearButton) clearButton.disabled = cart.length === 0;
+
+  if (cart.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'cart-empty';
+    empty.textContent = 'Корзина пока пуста';
+    container.appendChild(empty);
+    return;
+  }
+
+  cart.forEach(item => {
+    const row = document.createElement('div');
+    row.className = 'cart-item';
+
+    const details = document.createElement('div');
+    details.className = 'cart-item-details';
+    const name = document.createElement('div');
+    name.className = 'cart-item-name';
+    name.textContent = item.name;
+    const meta = document.createElement('div');
+    meta.className = 'cart-item-meta';
+    meta.textContent = `Арт. ${item.article} · ${item.quantity} шт.`;
+    details.append(name, meta);
+
+    const controls = document.createElement('div');
+    controls.className = 'cart-item-controls';
+    const price = document.createElement('span');
+    price.textContent = (item.price * item.quantity).toLocaleString('ru-KZ') + ' тг';
+    const remove = document.createElement('button');
+    remove.className = 'cart-remove-btn';
+    remove.type = 'button';
+    remove.title = 'Удалить товар';
+    remove.textContent = '×';
+    remove.addEventListener('click', () => removeCartItem(item.article));
+    controls.append(price, remove);
+
+    row.append(details, controls);
+    container.appendChild(row);
+  });
+}
+
 function showToast(msg) {
   const container = document.getElementById('toastContainer');
   if (!container) return;
-  
   const toast = document.createElement('div');
   toast.className = 'toast';
   toast.textContent = msg;
-  
   container.appendChild(toast);
-  
   setTimeout(() => {
     toast.classList.add('hide');
     setTimeout(() => toast.remove(), 300);
   }, 4000);
 }
 
-// Append a plain text message bubble
 function appendMsg(text, role) {
   const container = document.getElementById('chatMessages');
   const wrap = document.createElement('div');
   wrap.className = `msg ${role}`;
-
   const bubble = document.createElement('div');
   bubble.className = 'msg-bubble';
-  bubble.innerHTML = text.replace(/\n/g, '<br/>');
-
+  bubble.textContent = text;
   const time = document.createElement('div');
   time.className = 'msg-time';
   time.textContent = now();
-
-  wrap.appendChild(bubble);
-  wrap.appendChild(time);
+  wrap.append(bubble, time);
   container.appendChild(wrap);
   scrollBottom();
 }
 
-// Append product cards with image, name, price, link
 function appendProductCards(products) {
   const container = document.getElementById('chatMessages');
-
   const wrap = document.createElement('div');
   wrap.className = 'msg bot';
-
   const cardsWrap = document.createElement('div');
   cardsWrap.className = 'product-cards-row';
 
-  products.forEach(p => {
+  products.forEach(product => {
     const card = document.createElement('a');
     card.className = 'chat-product-card';
-    card.href = p.url;
+    card.href = safeURL(product.url);
     card.target = '_blank';
     card.rel = 'noopener noreferrer';
 
     const imgWrap = document.createElement('div');
     imgWrap.className = 'chat-product-img-wrap';
-
-    if (p.image) {
-      const img = document.createElement('img');
-      img.src = p.image;
-      img.alt = p.name;
-      img.className = 'chat-product-img';
-      img.onerror = () => {
-        img.style.display = 'none';
-        placeholder.style.display = 'flex';
-      };
-      imgWrap.appendChild(img);
-    }
-
     const placeholder = document.createElement('div');
     placeholder.className = 'chat-product-placeholder';
     placeholder.textContent = '⚡';
-    placeholder.style.display = p.image ? 'none' : 'flex';
     imgWrap.appendChild(placeholder);
+    if (product.image && safeURL(product.image) !== '#') {
+      const img = document.createElement('img');
+      img.src = safeURL(product.image);
+      img.alt = product.name || 'Товар';
+      img.className = 'chat-product-img';
+      img.onerror = () => { img.remove(); };
+      imgWrap.insertBefore(img, placeholder);
+      placeholder.style.display = 'none';
+    }
 
     const info = document.createElement('div');
     info.className = 'chat-product-info';
-
     const article = document.createElement('div');
     article.className = 'chat-product-article';
-    article.textContent = 'Арт: ' + (p.article || '—');
-
+    article.textContent = 'Арт: ' + (product.article || '—');
     const name = document.createElement('div');
     name.className = 'chat-product-name';
-    name.textContent = p.name;
-
+    name.textContent = product.name || 'Товар';
     const footer = document.createElement('div');
     footer.className = 'chat-product-footer';
-
     const price = document.createElement('span');
     price.className = 'chat-product-price';
-    price.textContent = p.price ? p.price.toLocaleString('ru-KZ') + ' тг' : 'По запросу';
-
+    price.textContent = product.price ? product.price.toLocaleString('ru-KZ') + ' тг' : 'По запросу';
     const link = document.createElement('span');
     link.className = 'chat-product-link';
     link.textContent = 'Подробнее →';
-
-    footer.appendChild(price);
-    footer.appendChild(link);
-
-    info.appendChild(article);
-    info.appendChild(name);
-    info.appendChild(footer);
-
-    card.appendChild(imgWrap);
-    card.appendChild(info);
+    footer.append(price, link);
+    info.append(article, name, footer);
+    card.append(imgWrap, info);
     cardsWrap.appendChild(card);
   });
 
@@ -238,7 +323,7 @@ function showTyping() {
   const wrap = document.createElement('div');
   wrap.id = id;
   wrap.className = 'msg bot typing';
-  wrap.innerHTML = `<div class="msg-bubble"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>`;
+  wrap.innerHTML = '<div class="msg-bubble"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>';
   container.appendChild(wrap);
   scrollBottom();
   return id;
@@ -250,20 +335,26 @@ function removeTyping(id) {
 }
 
 function scrollBottom() {
-  const c = document.getElementById('chatMessages');
-  setTimeout(() => { c.scrollTop = c.scrollHeight; }, 60);
+  const container = document.getElementById('chatMessages');
+  if (container) setTimeout(() => { container.scrollTop = container.scrollHeight; }, 60);
 }
 
 function now() {
-  const d = new Date();
-  return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+  const date = new Date();
+  return date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
 }
 
-// Close on outside click
-document.addEventListener('click', e => {
+document.addEventListener('DOMContentLoaded', loadCart);
+
+document.addEventListener('click', event => {
   const widget = document.getElementById('chatWidget');
   const bubble = document.getElementById('chatBubble');
-  if (isOpen && !widget.contains(e.target) && !bubble.contains(e.target)) {
+  const cartPanel = document.getElementById('cartPanel');
+  const cartButton = document.getElementById('cartButton');
+  if (isOpen && widget && bubble && !widget.contains(event.target) && !bubble.contains(event.target)) {
     toggleChat();
+  }
+  if (cartPanel && cartPanel.classList.contains('open') && !cartPanel.contains(event.target) && !cartButton.contains(event.target)) {
+    closeCart();
   }
 });

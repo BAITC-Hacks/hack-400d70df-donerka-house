@@ -49,7 +49,10 @@ go run main.go
 |-------|----------|----------|
 | `GET` | `/` | Главная страница |
 | `GET` | `/api/catalog` | Все товары из JSON файлов |
-| `POST` | `/api/chat` | Вопрос AI-ассистенту |
+| `POST` | `/api/chat` | Вопрос AI-ассистенту; при явном согласии может добавить товар в корзину |
+| `GET` | `/api/cart` | Получить корзину текущей браузерной сессии |
+| `POST` | `/api/cart` | Добавить товар: `{ "article": "200300285_", "quantity": 1 }` |
+| `DELETE` | `/api/cart?article=200300285_` | Удалить товар; без `article` очистить корзину |
 | `GET` | `/health` | Статус сервера |
 
 ### Пример чата:
@@ -57,6 +60,17 @@ go run main.go
 curl -X POST http://localhost:8080/api/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "Нужен автоматический выключатель 160А, что есть?"}'
+```
+
+### Пример корзины:
+```bash
+# Cookie из ответа сохраняет корзину текущего клиента
+curl -c cookies.txt -b cookies.txt http://localhost:8080/api/cart
+curl -c cookies.txt -b cookies.txt -X POST http://localhost:8080/api/cart \
+  -H "Content-Type: application/json" \
+  -d '{"article":"200300285_","quantity":1}'
+curl -c cookies.txt -b cookies.txt -X DELETE \
+  'http://localhost:8080/api/cart?article=200300285_'
 ```
 
 ---
@@ -92,6 +106,12 @@ curl -X POST http://localhost:8080/api/chat \
 Просто положи дополнительные файлы JSON в папку `data/`:
 - `products3.json`, `products4.json` и т.д.
 - Обнови `main.go` → массив `files` чтобы подключить их
+
+## 🛒 Корзина и AI-добавление
+
+Корзина привязана к HttpOnly-cookie `ekt_session` и хранится в памяти процесса. Это подходит для демо и одного экземпляра приложения. Перед production-развертыванием замени `handlers.CartStore` на Redis или базу данных, чтобы корзины не терялись после перезапуска и работали между несколькими экземплярами.
+
+Сервер проверяет артикул товара, согласие пользователя и количество от 1 до 999. В режиме без `OPENAI_API_KEY` прямые команды вроде `Добавь в корзину 200300285_, 2 шт.` также обрабатываются локально; рекомендации без ключа остаются демонстрационными.
 
 ---
 

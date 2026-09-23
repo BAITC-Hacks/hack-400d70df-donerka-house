@@ -56,7 +56,7 @@
           <div class="phone">📞 <a href="tel:+77273468888">+7 (727) 346-88-88</a></div>
           <div class="phone-sub">+7 (778) 046-88-88</div>
         </div>
-        <div class="cart-btn" onclick="alert('Переход в корзину (B2B)')">
+        <div class="cart-btn" id="cartButton" onclick="toggleCart()" role="button" tabindex="0" aria-label="Открыть корзину">
           <div class="cart-icon">🛒<div class="cart-badge" id="cartCount">0</div></div>
           <div class="cart-total" id="cartTotal">0 тг</div>
         </div>
@@ -66,6 +66,21 @@
 
   <!-- TOAST NOTIFICATION CONTAINER -->
   <div id="toastContainer" class="toast-container"></div>
+
+  <!-- SESSION CART -->
+  <aside class="cart-panel" id="cartPanel" aria-label="Корзина">
+    <div class="cart-panel-header">
+      <h2>Корзина</h2>
+      <button class="cart-close-btn" type="button" onclick="closeCart()" aria-label="Закрыть корзину">✕</button>
+    </div>
+    <div id="cartItems" class="cart-items"></div>
+    <div class="cart-panel-footer">
+      <div class="cart-panel-total-row"><span>Итого</span><strong id="cartPanelTotal">0 тг</strong></div>
+      <button id="clearCartBtn" class="btn btn-outline cart-clear-btn" type="button" onclick="clearCart()">Очистить</button>
+      <a class="btn btn-primary cart-checkout-btn" href="https://ekt.kz/personal/" target="_blank" rel="noopener noreferrer">Перейти к оформлению</a>
+      <p class="cart-note">Корзина сохранена для этой сессии браузера.</p>
+    </div>
+  </aside>
 
   <!-- NAV CATEGORIES -->
   <nav class="cat-nav">
@@ -305,6 +320,12 @@
     }
 
     // === Render products ===
+    function escapeHTML(value) {
+      return String(value ?? '').replace(/[&<>'"]/g, char => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+      }[char]));
+    }
+
     function renderCatalog() {
       const grid = document.getElementById('catalogGrid');
       const count = document.getElementById('catalogCount');
@@ -319,19 +340,19 @@
       }
 
       grid.innerHTML = visible.map(p => `
-        <div class="product-card" data-url="${p.url}">
+        <div class="product-card" data-url="${escapeHTML(safeURL(p.url))}">
           <div class="product-img-wrap">
-            ${p.image
-              ? `<img src="${p.image}" alt="${p.name}" class="product-img" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+            ${p.image && safeURL(p.image) !== '#'
+              ? `<img src="${escapeHTML(safeURL(p.image))}" alt="${escapeHTML(p.name)}" class="product-img" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
               : ''}
-            <div class="product-img-placeholder" style="${p.image ? 'display:none' : ''}">⚡</div>
+            <div class="product-img-placeholder" style="${p.image && safeURL(p.image) !== '#' ? 'display:none' : ''}">⚡</div>
           </div>
           <div class="product-body">
-            <div class="product-article">Арт: ${p.article || '—'}</div>
-            <div class="product-name">${p.name}</div>
+            <div class="product-article">Арт: ${escapeHTML(p.article || '—')}</div>
+            <div class="product-name">${escapeHTML(p.name)}</div>
             <div class="product-footer">
-              <div class="product-price">${p.price ? p.price.toLocaleString('ru-KZ') + ' тг' : 'По запросу'}</div>
-              <a href="${p.url}" target="_blank" class="product-btn">Подробнее →</a>
+              <div class="product-price">${p.price ? escapeHTML(p.price.toLocaleString('ru-KZ') + ' тг') : 'По запросу'}</div>
+              <a href="${escapeHTML(safeURL(p.url))}" target="_blank" rel="noopener noreferrer" class="product-btn">Подробнее →</a>
             </div>
           </div>
         </div>

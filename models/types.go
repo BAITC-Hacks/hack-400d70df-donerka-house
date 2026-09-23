@@ -69,11 +69,33 @@ type CartAction struct {
 	Quantity int     `json:"quantity"`
 }
 
+// CartItem is a validated product currently in a user's session cart.
+type CartItem struct {
+	Article  string  `json:"article"`
+	Name     string  `json:"name"`
+	Price    float64 `json:"price"`
+	Quantity int     `json:"quantity"`
+}
+
+// CartResponse is returned by the cart API and the chat API after a cart change.
+type CartResponse struct {
+	Items []CartItem `json:"items"`
+	Count int        `json:"count"`
+	Total float64    `json:"total"`
+}
+
+// CartRequest is used to add a catalog product to the current session cart.
+type CartRequest struct {
+	Article  string `json:"article"`
+	Quantity int    `json:"quantity"`
+}
+
 // ChatResponse is the AI reply + optional matched products and cart actions
 type ChatResponse struct {
 	Reply      string          `json:"reply"`
 	Products   []ProductResult `json:"products,omitempty"`
 	CartAction *CartAction     `json:"cart_action,omitempty"`
+	Cart       *CartResponse   `json:"cart,omitempty"`
 }
 
 // ErrorResponse is a standard error

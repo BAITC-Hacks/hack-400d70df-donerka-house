@@ -83,13 +83,15 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
+	cartStore := handlers.NewCartStore()
 
 	// Static files
 	mux.Handle("/", http.FileServer(http.Dir("static")))
 
 	// API
 	mux.HandleFunc("/api/catalog", handlers.CatalogHandler(catalog))
-	mux.HandleFunc("/api/chat", handlers.ChatHandler(catalog))
+	mux.HandleFunc("/api/chat", handlers.ChatHandler(catalog, cartStore))
+	mux.HandleFunc("/api/cart", handlers.CartHandler(catalog, cartStore))
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"status":"ok","products":%d}`, len(catalog.Products))
